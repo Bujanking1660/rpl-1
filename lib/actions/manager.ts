@@ -12,25 +12,87 @@ export async function getDashboardStatsAction() {
     .from('pegawai')
     .select('*', { count: 'exact', head: true });
 
-  // Total Pemasukan Bersih
+  // Total Pemasukan dari pembayaran terkonfirmasi
   const { data: pembayaran } = await supabase
     .from('pembayaran')
-    .select('total_bayar')
+    .select('total_bayar, metode_pembayaran, created_at')
     .eq('status_pembayaran', 'terkonfirmasi');
 
   const totalPemasukan = pembayaran?.reduce((sum, item) => sum + Number(item.total_bayar || 0), 0) || 0;
+  const totalOrderKonfirmasi = pembayaran?.length || 0;
+  const avgOrderValue = totalOrderKonfirmasi > 0 ? Math.round(totalPemasukan / totalOrderKonfirmasi) : 0;
+
+  // Breakdown metode pembayaran
+  const tunaiCount = pembayaran?.filter((p) => p.metode_pembayaran === 'tunai').length || 0;
+  const qrisCount = pembayaran?.filter((p) => p.metode_pembayaran === 'qr_gopay').length || 0;
+
+  // Revenue 7 hari terakhir
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+  const { data: revenueHarian } = await supabase
+    .from('pembayaran')
+    .select('total_bayar, created_at')
+    .eq('status_pembayaran', 'terkonfirmasi')
+    .gte('created_at', sevenDaysAgo.toISOString());
+
+  // Group by date
+  const revenueByDay: Record<string, number> = {};
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const key = d.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric' });
+    revenueByDay[key] = 0;
+  }
+  revenueHarian?.forEach((item) => {
+    const d = new Date(item.created_at);
+    const key = d.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric' });
+    if (key in revenueByDay) {
+      revenueByDay[key] += Number(item.total_bayar || 0);
+    }
+  });
+  const revenueChartData = Object.entries(revenueByDay).map(([hari, total]) => ({ hari, total }));
 
   // Status Okupansi Meja
   const { data: mejaList } = await supabase.from('meja').select('status_ketersediaan');
   const totalMeja = mejaList?.length || 0;
   const mejaTerisi = mejaList?.filter((m) => m.status_ketersediaan === 'terisi').length || 0;
 
+  // Top 5 Menu Terlaris dari detail_pesanan
+  const { data: detailPesanan } = await supabase
+    .from('detail_pesanan')
+    .select('jumlah, menu:id_menu(nama_menu, kategori)');
+
+  const menuAgg: Record<string, { nama: string; kategori: string; total: number }> = {};
+  detailPesanan?.forEach((item: any) => {
+    const nama = item.menu?.nama_menu || 'Unknown';
+    const kategori = item.menu?.kategori || '-';
+    if (!menuAgg[nama]) menuAgg[nama] = { nama, kategori, total: 0 };
+    menuAgg[nama].total += Number(item.jumlah || 0);
+  });
+  const topMenu = Object.values(menuAgg)
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 5);
+
+  // Distribusi Role Pegawai
+  const { data: pegawaiList } = await supabase.from('pegawai').select('peran');
+  const roleAgg: Record<string, number> = { pelayan: 0, kasir: 0, koki: 0, manajer: 0 };
+  pegawaiList?.forEach((p) => { if (p.peran in roleAgg) roleAgg[p.peran]++; });
+  const roleDistribusi = Object.entries(roleAgg).map(([role, count]) => ({ role, count }));
+
   return {
     totalPegawai: totalPegawai || 0,
     totalPemasukan,
+    totalOrderKonfirmasi,
+    avgOrderValue,
+    tunaiCount,
+    qrisCount,
     totalMeja,
     mejaTerisi,
+    mejaTersedia: totalMeja - mejaTerisi,
     okupansiPersen: totalMeja > 0 ? Math.round((mejaTerisi / totalMeja) * 100) : 0,
+    topMenu,
+    roleDistribusi,
+    revenueChartData,
   };
 }
 

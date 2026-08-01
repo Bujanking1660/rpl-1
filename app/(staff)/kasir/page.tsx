@@ -5,8 +5,9 @@ import { getPesananPendingKasirAction, prosesPembayaranAction } from '@/lib/acti
 import { logoutStaffAction } from '@/lib/actions/auth';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { LogOut, Printer, Wallet, QrCode, ArrowLeft, RefreshCw, CheckCircle2 } from 'lucide-react';
+import { LogOut, Wallet, QrCode, ArrowLeft, RefreshCw } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import { motion, AnimatePresence } from 'framer-motion';
 
 export default function KasirPage() {
   const router = useRouter();
@@ -17,6 +18,7 @@ export default function KasirPage() {
   const [loading, setLoading] = useState(false);
   const [metodePembayaran, setMetodePembayaran] = useState<'tunai' | 'qr_gopay'>('tunai');
   const [nominalDiterima, setNominalDiterima] = useState<number>(0);
+  const [categoryFilter, setCategoryFilter] = useState('Semua');
 
   useEffect(() => {
     fetchPesananList();
@@ -42,12 +44,17 @@ export default function KasirPage() {
   }
 
   const details = selectedPesanan?.detail_pesanan || [];
+  const filteredDetails = categoryFilter === 'Semua' 
+    ? details 
+    : details.filter((d: any) => d.menu?.kategori === categoryFilter);
+
   const subtotalPrice = details.reduce((sum: number, item: any) => sum + Number(item.subtotal || 0), 0);
   const serviceCharge = details.length > 0 ? 5000 : 0;
   const totalPrice = subtotalPrice + serviceCharge;
+  const totalItemsCount = details.reduce((sum: number, item: any) => sum + item.jumlah, 0);
   const kembalian = Math.max(0, nominalDiterima - totalPrice);
 
-  async function handleProsesBayar(withPrint: boolean) {
+  async function handleProsesBayar() {
     if (!selectedPesanan) return;
 
     if (metodePembayaran === 'tunai' && nominalDiterima < totalPrice) {
@@ -61,7 +68,7 @@ export default function KasirPage() {
 
     if (res.success) {
       toast.success('Pembayaran terkonfirmasi! Pesanan diteruskan ke dapur.');
-      if (withPrint) window.print();
+      window.print();
       fetchPesananList();
       setStep(1);
       setSelectedPesanan(null);
@@ -71,279 +78,294 @@ export default function KasirPage() {
   }
 
   return (
-    <div className="min-h-screen bg-stone-50 flex flex-col">
-      {/* Header */}
-      <header className="bg-[#1e2d42] text-white px-6 py-4 flex items-center justify-between shadow-lg no-print">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 bg-orange-500 rounded-xl p-1.5 shadow-md">
-            <img src="/logo.png" alt="Pak Resto" className="w-full h-full object-contain" />
-          </div>
-          <div>
-            <p className="font-black text-sm text-white">PAK RESTO</p>
-            <p className="text-[10px] text-blue-300">Kasir</p>
-          </div>
-        </div>
-
-        {/* Step Breadcrumb */}
-        <div className="hidden md:flex items-center gap-1.5 bg-white/5 px-3 py-1.5 rounded-full border border-white/10 text-xs">
-          {[1, 2, 3].map((n) => (
-            <span key={n} className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black transition-all ${
-              step === n ? 'bg-orange-500 text-white' : step > n ? 'bg-emerald-500 text-white' : 'bg-white/10 text-slate-400'
-            }`}>
-              {step > n ? '✓' : n}
-            </span>
-          ))}
-          <span className="text-slate-300 font-semibold ml-1 text-[11px]">
-            {step === 1 && 'Pilih Meja'}
-            {step === 2 && `Pesanan Meja ${selectedPesanan?.meja?.nomor_meja}`}
-            {step === 3 && `Bayar Meja ${selectedPesanan?.meja?.nomor_meja}`}
-          </span>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <button onClick={fetchPesananList} className="p-2 text-slate-400 hover:text-white hover:bg-white/10 rounded-xl transition-all">
-            <RefreshCw className="w-4 h-4" />
-          </button>
-          <button onClick={handleLogout} className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-slate-300 hover:text-red-300 hover:bg-red-500/10 rounded-xl transition-all">
-            <LogOut className="w-4 h-4" /> Keluar
-          </button>
-        </div>
-      </header>
-
-      <main className="flex-1 p-5 max-w-5xl mx-auto w-full flex flex-col justify-start">
-        {/* STEP 1: Grid Meja */}
-        {step === 1 && (
-          <div className="space-y-4">
-            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
-              <div className="flex items-center justify-between mb-5">
-                <div>
-                  <h2 className="font-black text-slate-800 text-base">Daftar Meja</h2>
-                  <p className="text-xs text-slate-400 mt-0.5">Meja berwarna oranye menunggu pembayaran</p>
-                </div>
-                <div className="flex items-center gap-3 text-[11px]">
-                  <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-orange-500" />Menunggu Bayar</span>
-                  <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-slate-200" />Kosong/Proses</span>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 sm:grid-cols-5 gap-3">
-                {Array.from({ length: 10 }).map((_, index) => {
-                  const nomorMeja = String(index + 1).padStart(2, '0');
-                  const pesananTarget = pesananList.find(
-                    (p) => p.meja?.nomor_meja === nomorMeja && p.status === 'menunggu_pembayaran'
-                  );
-                  const hasPending = !!pesananTarget;
-
-                  return (
-                    <button
-                      key={nomorMeja}
-                      onClick={() => {
-                        if (pesananTarget) {
-                          setSelectedPesanan(pesananTarget);
-                          setNominalDiterima(0);
-                          setStep(2);
-                        } else {
-                          toast.info(`Meja ${nomorMeja} tidak ada tagihan menunggu`);
-                        }
-                      }}
-                      className={`h-24 rounded-2xl flex flex-col items-center justify-center transition-all border-2 font-black ${
-                        hasPending
-                          ? 'bg-orange-500 border-orange-500 text-white shadow-lg shadow-orange-200 hover:bg-orange-600 scale-[1.02]'
-                          : 'bg-white border-slate-100 text-slate-300 hover:border-slate-200'
-                      }`}
-                    >
-                      <span className="text-2xl">{nomorMeja}</span>
-                      <span className="text-[9px] font-bold mt-0.5 opacity-80">
-                        {hasPending ? 'BAYAR' : 'KOSONG'}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
+    <div className="min-h-screen bg-[#35485E] p-4 md:p-8 text-slate-800 flex flex-col justify-between">
+      <div>
+        {/* Top Header Bar without step/takeaway matching user request */}
+        <div className="flex items-center justify-between mb-6 bg-white rounded-2xl px-6 py-3.5 shadow-md no-print">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-[#FA6338] rounded-xl flex items-center justify-center text-white font-black text-sm">
+              K
             </div>
+            <h1 className="text-base font-black text-slate-800 uppercase tracking-wide">
+              KASIR POS — RESTO PAK RESTO
+            </h1>
           </div>
+
+          <div className="flex items-center gap-3">
+            {step !== 1 && (
+              <button
+                onClick={() => setStep((step - 1) as 1 | 2)}
+                className="flex items-center gap-1.5 px-4 py-2 bg-[#FA6338] text-white rounded-xl text-xs font-extrabold uppercase hover:bg-orange-600 transition-all shadow-xs cursor-pointer"
+              >
+                <ArrowLeft className="w-4 h-4" /> Kembali
+              </button>
+            )}
+
+            <button onClick={fetchPesananList} className="p-2 text-slate-400 hover:text-slate-600 rounded-xl" title="Refresh">
+              <RefreshCw className="w-4 h-4" />
+            </button>
+            <button onClick={handleLogout} className="p-2 text-slate-400 hover:text-red-500 rounded-xl" title="Keluar">
+              <LogOut className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* STEP 1: PILIHAN MEJA */}
+        {step === 1 && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-[#2B4263] rounded-3xl p-6 md:p-8 shadow-2xl space-y-6 max-w-4xl mx-auto border-4 border-white/10"
+          >
+            {/* Status indicators: ONLY KOSONG & MENUNGGU BAYAR */}
+            <div className="flex items-center gap-6 text-xs text-white font-bold bg-white/10 px-5 py-3 rounded-2xl w-fit">
+              <span className="flex items-center gap-2">
+                <span className="w-4 h-4 rounded-lg bg-[#262626] border border-white/20" /> KOSONG
+              </span>
+              <span className="flex items-center gap-2">
+                <span className="w-4 h-4 rounded-lg bg-[#9DB2FF] border border-white/20" /> MENUNGGU BAYAR
+              </span>
+            </div>
+
+            {/* Grid 10 Tables matching Pelayan grid design */}
+            <div className="bg-[#EAEAEA] rounded-3xl p-6 md:p-8 grid grid-cols-2 sm:grid-cols-5 gap-4 border-2 border-[#2B4263]">
+              {Array.from({ length: 10 }).map((_, index) => {
+                const nomorMeja = String(index + 1).padStart(2, '0');
+                const pesananTarget = pesananList.find(
+                  (p) => p.meja?.nomor_meja === nomorMeja && p.status === 'menunggu_pembayaran'
+                );
+                const hasPending = !!pesananTarget;
+
+                return (
+                  <button
+                    key={nomorMeja}
+                    onClick={() => {
+                      if (pesananTarget) {
+                        setSelectedPesanan(pesananTarget);
+                        setNominalDiterima(0);
+                        setStep(2);
+                      } else {
+                        toast.info(`Meja ${nomorMeja} tidak memiliki tagihan aktif`);
+                      }
+                    }}
+                    className={`h-24 rounded-2xl flex flex-col items-center justify-center font-black text-2xl transition-all shadow-md cursor-pointer ${
+                      hasPending
+                        ? 'bg-[#9DB2FF] text-[#2B4263] scale-105 shadow-xl border-2 border-white ring-4 ring-[#9DB2FF]/30'
+                        : 'bg-[#262626] text-white hover:bg-black'
+                    }`}
+                  >
+                    <span>{nomorMeja}</span>
+                    <span className="text-[9px] font-semibold opacity-70 mt-1 uppercase">
+                      {hasPending ? 'MENUNGGU BAYAR' : 'KOSONG'}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="text-center font-black text-orange-400 text-xs tracking-widest uppercase">
+              RESTO PAK RESTO
+            </div>
+          </motion.div>
         )}
 
-        {/* STEP 2: Detail Pesanan */}
+        {/* STEP 2: DETAIL PESANAN MEJA XX */}
         {step === 2 && selectedPesanan && (
-          <div className="space-y-4">
-            <button onClick={() => setStep(1)} className="flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-slate-800 transition-colors">
-              <ArrowLeft className="w-4 h-4" /> Kembali ke Daftar Meja
-            </button>
+          <motion.div
+            initial={{ opacity: 0, scale: 0.98 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-[#2B4263] rounded-3xl p-6 md:p-8 shadow-2xl space-y-6 max-w-5xl mx-auto border-4 border-white/10"
+          >
+            {/* Category tabs */}
+            <div className="flex gap-3">
+              {['Semua', 'Makanan', 'Minuman'].map((cat) => (
+                <button
+                  key={cat}
+                  onClick={() => setCategoryFilter(cat)}
+                  className={`px-6 py-2.5 rounded-xl font-extrabold text-xs transition-all cursor-pointer ${
+                    categoryFilter === cat
+                      ? 'bg-[#262626] text-white shadow-md'
+                      : 'bg-white/80 text-slate-700 hover:bg-white'
+                  }`}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Item list */}
-              <div className="md:col-span-2 bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-                <div className="px-5 py-4 border-b border-slate-50">
-                  <h2 className="font-black text-slate-800">Pesanan Meja #{selectedPesanan.meja?.nomor_meja}</h2>
-                  <p className="text-xs text-slate-400 mt-0.5">{details.length} jenis menu</p>
-                </div>
-                <div className="divide-y divide-slate-50">
-                  {details.map((item: any) => (
-                    <div key={item.id_detail_pesanan} className="flex items-center justify-between px-5 py-4">
-                      <div>
-                        <p className="font-bold text-slate-800 text-sm">{item.menu?.nama_menu}</p>
-                        <p className="text-xs text-slate-400">{item.jumlah} × Rp {Number(item.menu?.harga || 0).toLocaleString('id-ID')}</p>
-                      </div>
-                      <span className="font-bold text-slate-800 text-sm">
-                        Rp {Number(item.subtotal).toLocaleString('id-ID')}
-                      </span>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {/* Menu items list */}
+              <div className="md:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4 max-h-[420px] overflow-y-auto pr-1">
+                {filteredDetails.map((item: any) => (
+                  <div
+                    key={item.id_detail_pesanan}
+                    className="bg-[#1E293B] text-white rounded-2xl p-5 flex flex-col justify-between border border-white/10 shadow-md h-32"
+                  >
+                    <div className="font-extrabold text-sm leading-tight">
+                      {item.menu?.nama_menu} <span className="text-[#FA6338]">x{item.jumlah}</span>
                     </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Summary */}
-              <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 flex flex-col justify-between">
-                <div className="space-y-3">
-                  <h3 className="font-black text-slate-800">Ringkasan</h3>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between text-slate-500">
-                      <span>Subtotal</span>
-                      <span>Rp {subtotalPrice.toLocaleString('id-ID')}</span>
-                    </div>
-                    <div className="flex justify-between text-slate-500">
-                      <span>Biaya Layanan</span>
-                      <span>Rp {serviceCharge.toLocaleString('id-ID')}</span>
-                    </div>
-                    <div className="flex justify-between font-black text-slate-800 text-base pt-2 border-t border-slate-100">
-                      <span>Total</span>
-                      <span className="text-orange-500">Rp {totalPrice.toLocaleString('id-ID')}</span>
+                    <div className="text-orange-400 font-black text-base">
+                      Rp {Number(item.menu?.harga || 0).toLocaleString('id-ID')}
                     </div>
                   </div>
+                ))}
+              </div>
+
+              {/* Order Summary sidebar */}
+              <div className="bg-[#EAEAEA] text-slate-800 rounded-3xl p-6 flex flex-col justify-between space-y-6 border-2 border-slate-300">
+                <div>
+                  <h3 className="font-black text-base text-slate-900 border-b border-slate-300 pb-3 mb-4">
+                    Meja #{selectedPesanan.meja?.nomor_meja}
+                  </h3>
+                  <div className="space-y-2 text-xs font-semibold text-slate-700">
+                    {details.map((item: any) => (
+                      <div key={item.id_detail_pesanan} className="flex justify-between">
+                        <span>{item.menu?.nama_menu}</span>
+                        <span className="font-bold">{item.jumlah}x</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="pt-4 mt-4 border-t border-dashed border-slate-400 flex justify-between text-xs font-black text-slate-900">
+                    <span>Total Item :</span>
+                    <span>{totalItemsCount} Item</span>
+                  </div>
                 </div>
+
                 <button
                   onClick={() => setStep(3)}
-                  className="w-full py-3 mt-5 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-2xl text-sm transition-colors shadow-md"
+                  className="w-full py-4 bg-[#FA6338] hover:bg-orange-600 text-white font-extrabold rounded-2xl text-xs uppercase tracking-wider transition-all shadow-md cursor-pointer"
                 >
-                  Proses Pembayaran &rarr;
+                  LANJUT BAYAR &rarr;
                 </button>
               </div>
             </div>
-          </div>
+
+            <div className="text-center font-black text-orange-400 text-xs tracking-widest uppercase">
+              RESTO PAK RESTO
+            </div>
+          </motion.div>
         )}
 
-        {/* STEP 3: Pembayaran */}
+        {/* STEP 3: PEMBAYARAN MEJA XX */}
         {step === 3 && selectedPesanan && (
-          <div className="space-y-4">
-            <button onClick={() => setStep(2)} className="flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-slate-800 transition-colors no-print">
-              <ArrowLeft className="w-4 h-4" /> Kembali ke Detail Pesanan
-            </button>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Struk area */}
-              <div className="md:col-span-2 bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden print-area">
-                <div className="px-5 py-4 text-center border-b border-slate-100">
-                  <div className="flex items-center justify-center gap-2 mb-1">
-                    <img src="/logo.png" alt="Pak Resto" className="w-6 h-6 object-contain" />
-                    <h2 className="font-black text-slate-800">PAK RESTO UNIKOM</h2>
-                  </div>
-                  <p className="text-xs text-slate-400">Meja #{selectedPesanan.meja?.nomor_meja} — Struk Pembayaran</p>
-                </div>
-                <div className="divide-y divide-slate-50">
-                  {details.map((item: any) => (
-                    <div key={item.id_detail_pesanan} className="flex items-center justify-between px-5 py-3.5">
-                      <div>
-                        <p className="font-semibold text-slate-800 text-sm">{item.menu?.nama_menu}</p>
-                        <p className="text-xs text-slate-400">{item.jumlah} porsi</p>
+          <motion.div
+            initial={{ opacity: 0, scale: 0.98 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-[#2B4263] rounded-3xl p-6 md:p-8 shadow-2xl space-y-6 max-w-5xl mx-auto border-4 border-white/10"
+          >
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {/* Ringkasan Pesanan Box */}
+              <div className="md:col-span-2 bg-[#EAEAEA] rounded-3xl p-6 md:p-8 flex flex-col justify-between border-2 border-slate-300 print-area">
+                <div>
+                  <h2 className="font-black text-slate-900 text-sm uppercase tracking-wider border-b border-slate-300 pb-3 mb-4">
+                    RINGKASAN PESANAN - MEJA {selectedPesanan.meja?.nomor_meja}
+                  </h2>
+                  <div className="space-y-3">
+                    {details.map((item: any) => (
+                      <div key={item.id_detail_pesanan} className="flex justify-between text-xs font-bold text-slate-800">
+                        <span>{item.menu?.nama_menu} {item.jumlah}x</span>
+                        <span>Rp {Number(item.subtotal).toLocaleString('id-ID')}</span>
                       </div>
-                      <span className="font-bold text-slate-800 text-sm">
-                        Rp {Number(item.subtotal).toLocaleString('id-ID')}
-                      </span>
+                    ))}
+                  </div>
+                  <div className="pt-4 mt-6 border-t border-dashed border-slate-400 space-y-2 text-xs">
+                    <div className="flex justify-between text-slate-600 font-medium">
+                      <span>Service charge</span>
+                      <span>Rp {serviceCharge.toLocaleString('id-ID')}</span>
                     </div>
-                  ))}
-                </div>
-                <div className="px-5 py-3 space-y-2 border-t border-slate-100 bg-slate-50">
-                  <div className="flex justify-between text-xs text-slate-500">
-                    <span>Subtotal</span><span>Rp {subtotalPrice.toLocaleString('id-ID')}</span>
-                  </div>
-                  <div className="flex justify-between text-xs text-slate-500">
-                    <span>Biaya Layanan</span><span>Rp {serviceCharge.toLocaleString('id-ID')}</span>
-                  </div>
-                  <div className="flex justify-between font-black text-slate-800 text-base pt-2 border-t border-slate-200">
-                    <span>Total Bayar</span>
-                    <span className="text-orange-500">Rp {totalPrice.toLocaleString('id-ID')}</span>
+                    <div className="flex justify-between font-bold text-slate-800">
+                      <span>Total Item :</span>
+                      <span>{totalItemsCount} Item</span>
+                    </div>
+                    <div className="flex justify-between font-black text-slate-900 text-lg pt-2">
+                      <span>Total Tagihan:</span>
+                      <span className="text-[#FA6338]">Rp {totalPrice.toLocaleString('id-ID')}</span>
+                    </div>
                   </div>
                 </div>
               </div>
 
-              {/* Metode bayar */}
-              <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 flex flex-col gap-4 no-print">
-                <h3 className="font-black text-slate-800">Metode Pembayaran</h3>
+              {/* Metode Pembayaran Box */}
+              <div className="bg-[#EAEAEA] rounded-3xl p-6 flex flex-col justify-between space-y-4 border-2 border-slate-300 no-print">
+                <div className="space-y-4">
+                  <h3 className="font-black text-slate-900 text-xs uppercase tracking-wider border-b border-slate-300 pb-2">
+                    Metode Pembayaran
+                  </h3>
 
-                <div className="grid grid-cols-2 gap-2">
-                  {[
-                    { value: 'tunai', label: 'Tunai', icon: <Wallet className="w-4 h-4" /> },
-                    { value: 'qr_gopay', label: 'QRIS GoPay', icon: <QrCode className="w-4 h-4" /> },
-                  ].map(({ value, label, icon }) => (
+                  <div className="grid grid-cols-2 gap-2">
                     <button
-                      key={value}
-                      onClick={() => setMetodePembayaran(value as 'tunai' | 'qr_gopay')}
-                      className={`flex flex-col items-center gap-1.5 py-3 rounded-2xl font-bold text-xs transition-all border-2 ${
-                        metodePembayaran === value
-                          ? 'bg-orange-500 border-orange-500 text-white shadow-md shadow-orange-200'
-                          : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'
+                      onClick={() => setMetodePembayaran('tunai')}
+                      className={`flex flex-col items-center justify-center p-3 rounded-2xl font-black text-xs transition-all cursor-pointer ${
+                        metodePembayaran === 'tunai' ? 'bg-[#FA6338] text-white shadow-md' : 'bg-slate-200 text-slate-700'
                       }`}
                     >
-                      {icon} {label}
+                      <Wallet className="w-5 h-5 mb-1" /> Tunai
                     </button>
-                  ))}
-                </div>
+                    <button
+                      onClick={() => setMetodePembayaran('qr_gopay')}
+                      className={`flex flex-col items-center justify-center p-3 rounded-2xl font-black text-xs transition-all cursor-pointer ${
+                        metodePembayaran === 'qr_gopay' ? 'bg-[#262626] text-white shadow-md' : 'bg-slate-200 text-slate-700'
+                      }`}
+                    >
+                      <QrCode className="w-5 h-5 mb-1" /> QRIS
+                    </button>
+                  </div>
 
-                {metodePembayaran === 'tunai' ? (
-                  <div className="space-y-3">
+                  {/* If QRIS selected, show WhatsApp image asset per user request */}
+                  {metodePembayaran === 'qr_gopay' ? (
+                    <div className="bg-white p-4 rounded-2xl text-center border border-slate-200 space-y-2">
+                      <div className="w-40 h-40 mx-auto relative rounded-xl overflow-hidden shadow-inner border border-slate-300">
+                        <img
+                          src="/WhatsApp Image 2026-08-01 at 17.24.05.jpeg"
+                          alt="QRIS Payment Code"
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                        Scan QRIS Pembayaran
+                      </p>
+                    </div>
+                  ) : (
                     <div>
-                      <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-1.5">
-                        Uang Diterima
+                      <label className="text-[10px] font-bold text-slate-600 uppercase tracking-wider block mb-1">
+                        Nominal Diterima
                       </label>
                       <input
                         type="number"
                         value={nominalDiterima || ''}
                         onChange={(e) => setNominalDiterima(Number(e.target.value))}
-                        placeholder="Contoh: 50000"
-                        className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-slate-800 font-bold focus:outline-none focus:border-orange-400 text-sm transition-colors"
+                        placeholder="Rp 50.000"
+                        className="w-full px-4 py-3 rounded-2xl bg-[#262626] text-white font-extrabold text-sm focus:outline-none placeholder-slate-400"
                       />
                     </div>
-                    <div className="flex justify-between items-center bg-emerald-50 border border-emerald-100 rounded-xl px-3 py-2">
-                      <span className="text-xs text-emerald-700 font-semibold">Kembalian</span>
-                      <span className="text-sm font-black text-emerald-700">
-                        Rp {kembalian.toLocaleString('id-ID')}
-                      </span>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="bg-slate-50 rounded-2xl p-3 flex flex-col items-center gap-2 border border-slate-100">
-                    <p className="text-[11px] font-bold text-slate-500">Scan QR GoPay Kasir</p>
-                    <img
-                      src="/gopay.png"
-                      alt="QR GoPay"
-                      className="w-40 h-40 object-contain rounded-xl"
-                      onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
-                    />
-                  </div>
-                )}
+                  )}
 
-                <div className="space-y-2 mt-auto">
-                  <button
-                    onClick={() => handleProsesBayar(true)}
-                    disabled={loading}
-                    className="w-full py-3 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-2xl text-xs flex items-center justify-center gap-2 transition-colors shadow-md disabled:opacity-60"
-                  >
-                    {loading ? <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <><Printer className="w-4 h-4" /> Bayar & Cetak Struk</>}
-                  </button>
-                  <button
-                    onClick={() => handleProsesBayar(false)}
-                    disabled={loading}
-                    className="w-full py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-2xl text-xs flex items-center justify-center gap-2 transition-colors disabled:opacity-60"
-                  >
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600" /> Konfirmasi Tanpa Struk
-                  </button>
+                  {metodePembayaran === 'tunai' && (
+                    <div className="flex justify-between items-center text-xs font-bold text-slate-800 pt-2 border-t border-slate-300">
+                      <span>Kembalian</span>
+                      <span className="text-[#FA6338] text-base font-black">Rp {kembalian.toLocaleString('id-ID')}</span>
+                    </div>
+                  )}
                 </div>
+
+                <button
+                  onClick={handleProsesBayar}
+                  disabled={loading}
+                  className="w-full py-4 bg-[#FA6338] hover:bg-orange-600 text-white font-extrabold rounded-2xl text-xs uppercase tracking-wider transition-all shadow-md disabled:opacity-50 cursor-pointer"
+                >
+                  {loading ? 'Memproses...' : 'Bayar & Cetak Struk'}
+                </button>
               </div>
             </div>
-          </div>
+
+            <div className="text-center font-black text-orange-400 text-xs tracking-widest uppercase">
+              RESTO PAK RESTO
+            </div>
+          </motion.div>
         )}
-      </main>
+      </div>
     </div>
   );
 }
+
+

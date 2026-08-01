@@ -4,7 +4,7 @@ import { useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { loginStaffAction } from '@/lib/actions/auth';
 import { toast } from 'sonner';
-import Image from 'next/image';
+import { motion } from 'framer-motion';
 
 function LoginFormContent() {
   const router = useRouter();
@@ -40,27 +40,25 @@ function LoginFormContent() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-5">
+    <form onSubmit={handleSubmit} className="space-y-6 max-w-sm w-full mx-auto">
       <div>
-        <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">Username</label>
         <input
           type="text"
-          placeholder="Masukkan username"
+          placeholder="Username"
           value={username}
           onChange={(e) => setUsername(e.target.value)}
-          className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-[#ff6b4a] focus:border-transparent text-slate-800 transition text-sm font-medium"
+          className="w-full px-6 py-3.5 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-[#FA6338] text-slate-700 bg-slate-50 focus:bg-white placeholder-slate-400 text-sm transition-all"
           required
         />
       </div>
 
       <div>
-        <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">Password</label>
         <input
           type="password"
-          placeholder="Masukkan password"
+          placeholder="Password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-[#ff6b4a] focus:border-transparent text-slate-800 transition text-sm font-medium"
+          className="w-full px-6 py-3.5 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-[#FA6338] text-slate-700 bg-slate-50 focus:bg-white placeholder-slate-400 text-sm transition-all"
           required
         />
       </div>
@@ -68,12 +66,12 @@ function LoginFormContent() {
       <button
         type="submit"
         disabled={loading}
-        className="w-full mt-4 py-3.5 px-6 bg-[#ff6b4a] hover:bg-orange-600 text-white font-bold rounded-2xl shadow-lg transition duration-200 disabled:opacity-50 flex items-center justify-center gap-2 text-sm"
+        className="w-full mt-6 py-3.5 px-6 bg-[#FA6338] hover:bg-orange-600 active:scale-[0.99] text-white font-extrabold rounded-2xl shadow-md transition-all duration-200 disabled:opacity-50 flex items-center justify-center gap-2 text-sm uppercase tracking-wider cursor-pointer"
       >
         {loading ? (
           <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
         ) : (
-          'MASUK SEKARANG'
+          'Submit'
         )}
       </button>
     </form>
@@ -82,50 +80,61 @@ function LoginFormContent() {
 
 export default function LoginPage() {
   return (
-    <div
-      className="min-h-screen w-full flex items-center justify-center p-4 bg-cover bg-center bg-no-relative"
-      style={{ backgroundImage: `url('/bg.png')` }}
-    >
-      {/* Dark overlay for contrast */}
-      <div className="absolute inset-0 bg-slate-950/70 backdrop-blur-sm" />
+    <div className="min-h-screen w-full flex items-center justify-center bg-[#35485E] p-4 md:p-8">
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4 }}
+        className="w-full max-w-5xl bg-white rounded-3xl overflow-hidden shadow-2xl flex flex-col md:flex-row min-h-[580px] border border-slate-200"
+      >
+        {/* Left Section with Coffee Pattern Texture */}
+        <div className="md:w-1/2 bg-[#2B4263] relative flex flex-col items-center justify-center p-8 md:p-12 overflow-hidden">
+          {/* Coffee background texture overlay */}
+          <div
+            className="absolute inset-0 opacity-30 bg-cover bg-center pointer-events-none"
+            style={{ backgroundImage: `url('/bg.png')` }}
+          />
 
-      <div className="relative z-10 w-full max-w-4xl bg-white/95 backdrop-blur-md rounded-3xl overflow-hidden shadow-2xl flex flex-col md:flex-row min-h-[520px] border border-white/20">
-        {/* Left Section with Logo & Brand */}
-        <div className="md:w-1/2 bg-gradient-to-br from-slate-900 via-slate-800 to-[#2b3a55] p-8 md:p-12 flex flex-col justify-center items-center text-white relative overflow-hidden">
-          <div className="absolute -left-10 -bottom-10 w-64 h-64 bg-orange-500/20 rounded-full blur-3xl pointer-events-none" />
-          
-          <div className="relative z-10 text-center flex flex-col items-center">
-            <div className="w-32 h-32 mb-4 relative flex items-center justify-center bg-white/10 rounded-3xl p-3 border border-white/10 shadow-inner">
+          <div className="relative z-10 flex flex-col items-center text-center">
+            {/* Basket Illustration / Logo */}
+            <motion.div
+              initial={{ scale: 0.9 }}
+              animate={{ scale: 1 }}
+              transition={{ duration: 0.5 }}
+              className="w-44 h-44 mb-6 relative flex items-center justify-center"
+            >
               <img
                 src="/logo.png"
-                alt="Pak Resto UNIKOM Logo"
-                className="w-full h-full object-contain filter drop-shadow-md"
+                alt="Pak Resto Logo"
+                className="w-full h-full object-contain filter drop-shadow-xl"
               />
-            </div>
-            <h1 className="text-3xl font-black tracking-tight text-white mb-1">PAK RESTO.</h1>
-            <p className="text-orange-400 text-xs font-semibold uppercase tracking-widest mb-3">UNIKOM RESTAURANT SYSTEM</p>
-            <p className="text-slate-300 text-xs max-w-xs leading-relaxed">
-              Sistem Informasi Operasional Restoran — Pelayan, Kasir, Koki, & Manager
+            </motion.div>
+            <h1 className="text-3xl font-black tracking-wider text-white mb-2 uppercase">RESTO PAK RESTO</h1>
+            <p className="text-slate-200 text-xs tracking-widest font-semibold uppercase bg-white/10 px-4 py-1.5 rounded-full border border-white/20">
+              UNIKOM System Access
             </p>
           </div>
         </div>
 
         {/* Right Section with Form */}
-        <div className="md:w-1/2 p-8 md:p-12 flex flex-col justify-center bg-white">
-          <div className="mb-6">
-            <h2 className="text-2xl font-black text-slate-800 tracking-tight">LOGIN PEGAWAI</h2>
-            <p className="text-slate-500 text-xs mt-1">Masuk dengan kredensial peran staff Anda</p>
+        <div className="md:w-1/2 p-8 md:p-14 flex flex-col items-center justify-center bg-white">
+          <div className="text-center mb-8">
+            <h2 className="text-3xl font-extrabold tracking-tight text-slate-800 uppercase">LOGIN</h2>
+            <p className="text-slate-400 text-xs mt-2 font-medium">Masuk ke sistem operasional restoran</p>
           </div>
 
           <Suspense fallback={<div className="text-center py-8 text-slate-400 text-xs">Memuat form login...</div>}>
             <LoginFormContent />
           </Suspense>
 
-          <div className="mt-8 pt-4 border-t border-slate-100 text-center text-[11px] text-slate-400">
-            Kredensial Default — <span className="font-mono text-slate-700 font-bold">pelayan / kasir / koki / manajer</span> (PW: +123)
+          <div className="mt-10 pt-4 border-t border-slate-100 text-center text-xs text-slate-400 font-medium">
+            Akun Default — <span className="font-bold text-slate-700">pelayan / kasir / koki / manajer</span>
           </div>
         </div>
-      </div>
+
+      </motion.div>
     </div>
   );
 }
+
+

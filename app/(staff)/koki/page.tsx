@@ -5,9 +5,9 @@ import { getAntrianKokiAction, updateStatusItemKokiAction, getRiwayatKokiAction 
 import { logoutStaffAction, getStaffSessionAction } from '@/lib/actions/auth';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { ChefHat, Utensils, History, LogOut, Clock, CheckCircle2, RefreshCw, UtensilsCrossed } from 'lucide-react';
-import { StatusItemPesanan } from '@/lib/types/database';
+import { LayoutDashboard, ShoppingBag, History, Search, ArrowUpRight, LogOut, CheckCircle2 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import { motion } from 'framer-motion';
 
 export default function KokiPage() {
   const router = useRouter();
@@ -15,8 +15,9 @@ export default function KokiPage() {
   const [session, setSession] = useState<any>(null);
   const [antrian, setAntrian] = useState<any[]>([]);
   const [riwayat, setRiwayat] = useState<any[]>([]);
-  const [activeTab, setActiveTab] = useState<'ANTRIAN' | 'RIWAYAT'>('ANTRIAN');
-  const [loading, setLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'PESANAN' | 'RIWAYAT'>('DASHBOARD');
+  const [filterPesanan, setFilterPesanan] = useState<'Semua' | 'Baru' | 'Sedang Dimasak' | 'Siap Di Antar'>('Semua');
+  const [searchQuery, setSearchQuery] = useState('');
   const [updatingId, setUpdatingId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -53,7 +54,7 @@ export default function KokiPage() {
     setUpdatingId(null);
 
     if (res.success) {
-      toast.success('Masakan ditandai selesai!');
+      toast.success('Masakan ditandai Selesai!');
       fetchData();
     } else {
       toast.error(res.error || 'Gagal memperbarui status');
@@ -65,236 +66,244 @@ export default function KokiPage() {
     router.push('/login');
   }
 
-  interface MejaGroup {
-    nomor_meja: string;
-    pesanan_id?: string;
-    tanggal?: string;
-    items: any[];
-  }
-
-  const pesananByMejaMap = antrian.reduce<Record<string, MejaGroup>>((acc, item) => {
-    const mejaNo = item.pesanan?.meja?.nomor_meja || '??';
-    if (!acc[mejaNo]) {
-      acc[mejaNo] = {
-        nomor_meja: mejaNo,
-        pesanan_id: item.pesanan?.id_pesanan,
-        tanggal: item.pesanan?.tanggal,
-        items: [],
-      };
-    }
-    acc[mejaNo].items.push(item);
-    return acc;
-  }, {});
-
-  const cardMejaList: MejaGroup[] = Object.values(pesananByMejaMap).sort((a, b) =>
-    a.nomor_meja.localeCompare(b.nomor_meja, undefined, { numeric: true })
-  );
-
-  const totalMenunggu = antrian.length;
-  const totalSelesaiHariIni = riwayat.length;
+  const filteredAntrian = antrian.filter((item) => {
+    const matchSearch = item.menu?.nama_menu?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                        item.pesanan?.meja?.nomor_meja?.includes(searchQuery);
+    return matchSearch;
+  });
 
   return (
-    <div className="min-h-screen bg-stone-50 flex flex-col md:flex-row">
-      {/* Sidebar */}
-      <aside className="w-full md:w-60 bg-[#1e2d42] text-white p-5 flex flex-col justify-between md:min-h-screen">
-        <div className="space-y-6">
-          {/* Brand */}
-          <div className="flex items-center gap-3 pt-1">
-            <div className="w-9 h-9 bg-orange-500 rounded-xl flex items-center justify-center shadow-lg p-1.5">
-              <img src="/logo.png" alt="Pak Resto" className="w-full h-full object-contain" />
+    <div className="min-h-screen bg-[#F4F6F9] flex flex-col md:flex-row text-slate-800">
+      {/* Left Sidebar */}
+      <aside className="w-full md:w-64 bg-white border-r border-slate-200 p-6 flex flex-col justify-between md:min-h-screen">
+        <div className="space-y-8">
+          {/* Logo Brand */}
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 bg-amber-400 rounded-full flex items-center justify-center p-1.5 shadow-sm">
+              <img src="/logo.png" alt="Pak Resto Logo" className="w-full h-full object-contain" />
             </div>
-            <div>
-              <p className="font-black text-sm text-white tracking-wide">PAK RESTO</p>
-              <p className="text-[10px] text-blue-300 font-semibold">Dapur / Koki</p>
-            </div>
+            <span className="font-extrabold text-lg tracking-wider text-[#FA6338] uppercase">
+              PAK RESTO.
+            </span>
           </div>
 
-          {/* Sapaan */}
-          {session && (
-            <div className="bg-white/5 rounded-xl p-3 border border-white/10">
-              <p className="text-[11px] text-blue-200">Logged in as</p>
-              <p className="font-bold text-sm text-white">{session.nama_pegawai}</p>
-            </div>
-          )}
-
-          {/* Stat mini */}
-          <div className="grid grid-cols-2 gap-2">
-            <div className="bg-orange-500/20 border border-orange-400/20 rounded-xl p-3 text-center">
-              <p className="text-xl font-black text-orange-300">{totalMenunggu}</p>
-              <p className="text-[10px] text-orange-200 font-semibold">Antrian</p>
-            </div>
-            <div className="bg-emerald-500/20 border border-emerald-400/20 rounded-xl p-3 text-center">
-              <p className="text-xl font-black text-emerald-300">{totalSelesaiHariIni}</p>
-              <p className="text-[10px] text-emerald-200 font-semibold">Selesai</p>
-            </div>
-          </div>
-
-          {/* Nav */}
-          <nav className="space-y-1">
-            <button
-              onClick={() => setActiveTab('ANTRIAN')}
-              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all ${
-                activeTab === 'ANTRIAN' ? 'bg-orange-500 text-white shadow-md' : 'text-blue-200 hover:bg-white/5'
-              }`}
-            >
-              <Utensils className="w-4 h-4" /> Antrian Masakan
-            </button>
-            <button
-              onClick={() => setActiveTab('RIWAYAT')}
-              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all ${
-                activeTab === 'RIWAYAT' ? 'bg-orange-500 text-white shadow-md' : 'text-blue-200 hover:bg-white/5'
-              }`}
-            >
-              <History className="w-4 h-4" /> Riwayat Selesai
-            </button>
+          {/* Navigation Links (Without Profile) */}
+          <nav className="space-y-2">
+            {[
+              { key: 'DASHBOARD', label: 'DASHBOARD', icon: <LayoutDashboard className="w-4 h-4" /> },
+              { key: 'PESANAN', label: 'PESANAN', icon: <ShoppingBag className="w-4 h-4" /> },
+              { key: 'RIWAYAT', label: 'RIWAYAT', icon: <History className="w-4 h-4" /> },
+            ].map(({ key, label, icon }) => (
+              <button
+                key={key}
+                onClick={() => setActiveTab(key as any)}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-bold transition-all cursor-pointer ${
+                  activeTab === key
+                    ? 'text-[#FA6338] bg-orange-50 font-extrabold shadow-xs'
+                    : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
+                }`}
+              >
+                {icon}
+                <span>{label}</span>
+              </button>
+            ))}
           </nav>
         </div>
 
         <button
           onClick={handleLogout}
-          className="w-full flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-xs font-bold text-slate-400 hover:bg-red-500/10 hover:text-red-300 transition-all"
+          className="flex items-center gap-2 text-xs font-bold text-slate-400 hover:text-red-500 transition-colors cursor-pointer mt-6 md:mt-0"
         >
-          <LogOut className="w-4 h-4" /> Keluar
+          <LogOut className="w-4 h-4" /> Log Out
         </button>
       </aside>
 
-      {/* Main Content */}
-      <main className="flex-1 p-5 md:p-8">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="text-xl font-black text-slate-800">
-              {activeTab === 'ANTRIAN' ? 'Antrian Masakan Dapur' : 'Riwayat Masakan Hari Ini'}
+      {/* Main Content Area */}
+      <main className="flex-1 p-6 md:p-10 space-y-6">
+        {/* DASHBOARD TAB */}
+        {activeTab === 'DASHBOARD' && (
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-8">
+            <h1 className="text-2xl font-black text-[#2B4263]">
+              Selamat Datang, {session?.nama_pegawai || 'Koki Andi'}
             </h1>
-            <p className="text-xs text-slate-400 mt-0.5">
-              {activeTab === 'ANTRIAN'
-                ? 'Pesanan pelanggan yang sudah dibayar dan perlu dimasak'
-                : 'Masakan yang sudah selesai dikerjakan hari ini'}
-            </p>
-          </div>
-          <button
-            onClick={fetchData}
-            className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-slate-500 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl transition-colors shadow-sm"
-          >
-            <RefreshCw className="w-3.5 h-3.5" /> Perbarui
-          </button>
-        </div>
 
-        {/* ANTRIAN TAB */}
-        {activeTab === 'ANTRIAN' && (
-          <>
-            {cardMejaList.length === 0 ? (
-              <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-12 text-center">
-                <ChefHat className="w-12 h-12 text-slate-200 mx-auto mb-3" />
-                <h3 className="font-bold text-slate-600 text-sm">Tidak ada antrian masakan</h3>
-                <p className="text-xs text-slate-400 mt-1">Semua pesanan yang dibayar sudah selesai dimasak.</p>
+            {/* Stat Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="bg-[#1E293B] text-white rounded-3xl p-6 flex justify-between items-center shadow-lg">
+                <div>
+                  <p className="text-xs font-semibold opacity-80 mb-1">Pesanan Baru</p>
+                  <p className="text-4xl font-extrabold">{antrian.length}</p>
+                </div>
+                <div className="w-12 h-12 bg-white text-slate-900 rounded-2xl flex items-center justify-center shadow-sm">
+                  <ArrowUpRight className="w-6 h-6" />
+                </div>
               </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {cardMejaList.map((card) => (
-                  <div key={card.nomor_meja} className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden hover:shadow-md transition-shadow">
-                    {/* Card Header */}
-                    <div className="bg-[#1e2d42] px-4 py-3.5 flex items-center justify-between">
-                      <div>
-                        <p className="text-[10px] font-bold text-orange-400 uppercase tracking-widest">Meja</p>
-                        <h3 className="text-2xl font-black text-white">#{card.nomor_meja}</h3>
-                      </div>
-                      <div className="text-right">
-                        <span className="inline-block bg-white/10 text-white text-[10px] font-bold px-2.5 py-1 rounded-full">
-                          {card.items.length} item
-                        </span>
-                        {card.tanggal && (
-                          <p className="text-[10px] text-slate-400 mt-1">
-                            {new Date(card.tanggal).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
-                          </p>
-                        )}
-                      </div>
-                    </div>
 
-                    {/* Items */}
-                    <div className="divide-y divide-slate-50">
-                      {card.items.map((item: any) => {
-                        const isUpdating = updatingId === item.id_detail_pesanan;
-                        return (
-                          <div key={item.id_detail_pesanan} className="px-4 py-3.5">
-                            <div className="flex items-start justify-between mb-2.5">
-                              <div>
-                                <p className="font-bold text-slate-800 text-sm">{item.menu?.nama_menu}</p>
-                                <p className="text-xs text-orange-500 font-semibold">{item.jumlah} porsi</p>
-                              </div>
-                              <span className="bg-amber-100 text-amber-700 text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0">
-                                Perlu Dimasak
-                              </span>
-                            </div>
-                            <button
-                              onClick={() => handleSelesaikan(item.id_detail_pesanan)}
-                              disabled={isUpdating}
-                              className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-colors shadow-sm disabled:opacity-60"
-                            >
-                              {isUpdating ? (
-                                <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                              ) : (
-                                <>
-                                  <CheckCircle2 className="w-3.5 h-3.5" />
-                                  Tandai Selesai Dimasak
-                                </>
-                              )}
-                            </button>
-                          </div>
-                        );
-                      })}
+              <div className="bg-white rounded-3xl p-6 flex justify-between items-center border border-slate-200 shadow-sm">
+                <div>
+                  <p className="text-xs font-semibold text-slate-400 mb-1">Sedang Dimasak</p>
+                  <p className="text-4xl font-extrabold text-slate-800">
+                    {antrian.filter(a => a.status_item === 'Diproses').length}
+                  </p>
+                </div>
+                <div className="w-12 h-12 bg-slate-200 text-slate-700 rounded-2xl flex items-center justify-center">
+                  <ArrowUpRight className="w-6 h-6" />
+                </div>
+              </div>
+
+              <div className="bg-white rounded-3xl p-6 flex justify-between items-center border border-slate-200 shadow-sm">
+                <div>
+                  <p className="text-xs font-semibold text-slate-400 mb-1">Selesai Hari Ini</p>
+                  <p className="text-4xl font-extrabold text-slate-800">{riwayat.length}</p>
+                </div>
+                <div className="w-12 h-12 bg-slate-200 text-slate-700 rounded-2xl flex items-center justify-center">
+                  <ArrowUpRight className="w-6 h-6" />
+                </div>
+              </div>
+            </div>
+
+            {/* Pesanan Section */}
+            <div className="space-y-4">
+              <h2 className="text-lg font-bold text-slate-800">Pesanan Dapur</h2>
+              <div className="flex gap-3">
+                {['Semua', 'Baru', 'Sedang Dimasak', 'Siap Di Antar'].map((tab) => (
+                  <button
+                    key={tab}
+                    onClick={() => setFilterPesanan(tab as any)}
+                    className={`px-6 py-2.5 rounded-xl text-xs font-bold transition-all border cursor-pointer ${
+                      filterPesanan === tab
+                        ? 'bg-white text-slate-900 border-slate-300 shadow-xs'
+                        : 'bg-transparent text-slate-400 border-transparent hover:text-slate-600'
+                    }`}
+                  >
+                    {tab}
+                  </button>
+                ))}
+              </div>
+
+              {/* Items Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {antrian.map((item) => (
+                  <div key={item.id_detail_pesanan} className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-bold text-[#FA6338]">Meja #{item.pesanan?.meja?.nomor_meja}</span>
+                      <span className="text-[10px] font-semibold bg-amber-100 text-amber-700 px-2.5 py-0.5 rounded-full">
+                        {item.status_item}
+                      </span>
                     </div>
+                    <div>
+                      <h3 className="font-bold text-slate-800 text-sm">{item.menu?.nama_menu}</h3>
+                      <p className="text-xs text-slate-400 mt-0.5">{item.jumlah} porsi</p>
+                    </div>
+                    <button
+                      onClick={() => handleSelesaikan(item.id_detail_pesanan)}
+                      disabled={updatingId === item.id_detail_pesanan}
+                      className="w-full py-2.5 bg-[#FA6338] hover:bg-orange-600 text-white rounded-xl text-xs font-extrabold transition-all cursor-pointer shadow-xs"
+                    >
+                      {updatingId === item.id_detail_pesanan ? 'Memproses...' : 'Tandai Selesai Dimasak'}
+                    </button>
                   </div>
                 ))}
               </div>
-            )}
-          </>
+            </div>
+          </motion.div>
+        )}
+
+        {/* PESANAN TAB */}
+        {activeTab === 'PESANAN' && (
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm space-y-6">
+            <div className="relative">
+              <Search className="w-4 h-4 absolute left-4 top-3.5 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Cari menu atau meja..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-11 pr-4 py-3 rounded-2xl bg-slate-50 border border-slate-200 text-xs font-semibold focus:outline-none"
+              />
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-slate-200 text-slate-400 font-bold uppercase">
+                    <th className="pb-3">No</th>
+                    <th className="pb-3">Meja</th>
+                    <th className="pb-3">Nama Menu</th>
+                    <th className="pb-3">Status</th>
+                    <th className="pb-3">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 font-medium">
+                  {filteredAntrian.map((item, idx) => (
+                    <tr key={item.id_detail_pesanan}>
+                      <td className="py-4">#{item.id_detail_pesanan.slice(0, 5)}</td>
+                      <td className="py-4 font-bold">{item.pesanan?.meja?.nomor_meja}</td>
+                      <td className="py-4">{item.menu?.nama_menu} ({item.jumlah}x)</td>
+                      <td className="py-4">
+                        <span className="bg-amber-100 text-amber-700 px-2 py-0.5 rounded-md font-semibold text-[10px]">
+                          {item.status_item}
+                        </span>
+                      </td>
+                      <td className="py-4">
+                        <button
+                          onClick={() => handleSelesaikan(item.id_detail_pesanan)}
+                          className="px-3 py-1.5 bg-[#FA6338] text-white rounded-lg font-bold hover:bg-orange-600 transition-all shadow-xs cursor-pointer"
+                        >
+                          Selesai
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </motion.div>
         )}
 
         {/* RIWAYAT TAB */}
         {activeTab === 'RIWAYAT' && (
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-            <div className="px-5 py-3.5 border-b border-slate-50 flex items-center justify-between">
-              <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Riwayat Masakan</h3>
-              <span className="text-xs font-bold bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full">
-                {riwayat.length} item
-              </span>
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm space-y-6">
+            <div className="relative">
+              <Search className="w-4 h-4 absolute left-4 top-3.5 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Cari..."
+                className="w-full pl-11 pr-4 py-3 rounded-2xl bg-slate-50 border border-slate-200 text-xs font-semibold focus:outline-none"
+              />
             </div>
-            <div className="divide-y divide-slate-50">
-              {riwayat.length === 0 ? (
-                <p className="text-xs text-slate-400 text-center py-8">Belum ada masakan yang selesai hari ini.</p>
-              ) : (
-                riwayat.map((item) => (
-                  <div key={item.id_detail_pesanan} className="flex items-center justify-between px-5 py-3.5 hover:bg-slate-50 transition-colors">
-                    <div>
-                      <p className="font-bold text-slate-800 text-sm">{item.menu?.nama_menu}</p>
-                      <p className="text-[11px] text-slate-400 mt-0.5">
-                        Meja #{item.pesanan?.meja?.nomor_meja} · {item.jumlah} porsi
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {item.status_item === 'Disajikan' ? (
-                        <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2.5 py-1 rounded-full">
-                          <UtensilsCrossed className="w-3 h-3" /> Disajikan
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-slate-200 text-slate-400 font-bold uppercase">
+                    <th className="pb-3">Tanggal</th>
+                    <th className="pb-3">No</th>
+                    <th className="pb-3">Meja</th>
+                    <th className="pb-3">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 font-medium">
+                  {riwayat.map((item) => (
+                    <tr key={item.id_detail_pesanan}>
+                      <td className="py-4">{item.pesanan?.tanggal ? new Date(item.pesanan.tanggal).toLocaleDateString('id-ID') : 'Hari ini'}</td>
+                      <td className="py-4">#{item.id_detail_pesanan.slice(0, 5)}</td>
+                      <td className="py-4 font-bold">{item.pesanan?.meja?.nomor_meja}</td>
+                      <td className="py-4">
+                        <span className="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-md font-semibold text-[10px]">
+                          Selesai
                         </span>
-                      ) : (
-                        <span className="flex items-center gap-1 text-[10px] font-bold text-blue-700 bg-blue-100 px-2.5 py-1 rounded-full">
-                          <CheckCircle2 className="w-3 h-3" /> Selesai
-                        </span>
-                      )}
-                      {item.pesanan?.tanggal && (
-                        <span className="text-[10px] text-slate-400 font-mono">
-                          {new Date(item.pesanan.tanggal).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                ))
-              )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-          </div>
+          </motion.div>
         )}
       </main>
     </div>
   );
 }
+
+

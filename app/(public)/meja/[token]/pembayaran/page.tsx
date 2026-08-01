@@ -5,7 +5,7 @@ import { useParams } from 'next/navigation';
 import { getPesananByTokenAction } from '@/lib/actions/pelanggan';
 import { createClient } from '@/lib/supabase/client';
 import Link from 'next/link';
-import { MapPin, RefreshCw } from 'lucide-react';
+import { ArrowLeft, RefreshCw } from 'lucide-react';
 
 export default function CustomerPembayaranPage() {
   const params = useParams();
@@ -39,84 +39,78 @@ export default function CustomerPembayaranPage() {
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[50vh] gap-3">
-        <span className="w-8 h-8 border-[3px] border-orange-400 border-t-transparent rounded-full animate-spin" />
-        <p className="text-sm text-slate-400">Memuat tagihan...</p>
+        <span className="w-8 h-8 border-[3px] border-[#FA6338] border-t-transparent rounded-full animate-spin" />
+        <p className="text-xs text-slate-400">Memuat tagihan...</p>
       </div>
     );
   }
 
-  const nomorMeja = data?.pesanan?.meja?.nomor_meja || '??';
+  const nomorMeja = data?.pesanan?.meja?.nomor_meja || '01';
   const pesananStatus = data?.pesanan?.status || 'menunggu_pembayaran';
   const isPaid = pesananStatus === 'diproses' || pesananStatus === 'selesai';
   const details = data?.details || [];
   const total = details.reduce((sum: number, item: any) => sum + Number(item.subtotal || 0), 0);
 
   return (
-    <div className="px-4 pt-4 pb-6 space-y-4">
-      {/* Meja Badge */}
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 flex items-center justify-between">
-        <div>
-          <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-wider">Nomor Meja Anda</p>
-          <h1 className="text-4xl font-black text-orange-500 mt-0.5">#{nomorMeja}</h1>
+    <div className="min-h-screen bg-white flex flex-col justify-between p-6">
+      {/* Top Header */}
+      <div>
+        <div className="flex items-center justify-between mb-10 text-slate-700">
+          <Link href={`/meja/${token}/menu`} className="flex items-center gap-1 text-sm font-semibold text-slate-600 hover:text-slate-900">
+            <ArrowLeft className="w-4 h-4" />
+          </Link>
+          <span className="text-base font-bold text-slate-800">Payment</span>
+          <button onClick={fetchData} className="text-slate-400 hover:text-slate-600">
+            <RefreshCw className="w-4 h-4" />
+          </button>
         </div>
-        <div className="w-14 h-14 bg-orange-50 rounded-2xl flex flex-col items-center justify-center border border-orange-100">
-          <MapPin className="w-6 h-6 text-orange-400" />
-          <span className="text-[9px] text-orange-500 font-bold mt-0.5">Meja</span>
-        </div>
-      </div>
 
-      {/* Instruksi */}
-      {!isPaid ? (
-        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
-          <h2 className="font-black text-amber-800 text-sm mb-1">Cara Membayar</h2>
-          <p className="text-amber-700 text-xs leading-relaxed">
-            Sebutkan nomor meja <strong>#{nomorMeja}</strong> kepada petugas kasir. Kasir akan memproses pembayaran Anda dan memulai proses masak di dapur.
+        {/* Center Meja Banner matching Pelanggan.png */}
+        <div className="text-center my-12 space-y-4">
+          <h1 className="text-4xl font-extrabold text-[#FA6338] tracking-tight uppercase">
+            MEJA {nomorMeja}
+          </h1>
+          <h2 className="text-2xl font-bold text-[#2B4263]">
+            {isPaid ? 'Pembayaran Berhasil!' : 'Harap Konfirmasi Ke Kasir!'}
+          </h2>
+          <p className="text-xs text-slate-400 max-w-xs mx-auto">
+            {isPaid 
+              ? 'Pesanan Anda sudah dikonfirmasi dan sedang disiapkan oleh dapur.' 
+              : 'Sebutkan nomor meja ke Kasir untuk menyelesaikan pembayaran dan memproses pesanan Anda.'}
           </p>
         </div>
-      ) : (
-        <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4">
-          <h2 className="font-black text-emerald-800 text-sm mb-1">✓ Pembayaran Terkonfirmasi</h2>
-          <p className="text-emerald-700 text-xs leading-relaxed">
-            Terima kasih! Pembayaran telah dikonfirmasi oleh kasir. Pesanan Anda sedang dimasak.
-          </p>
-        </div>
-      )}
 
-      {/* Rincian Tagihan */}
-      {details.length > 0 && (
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-          <div className="px-4 py-3 border-b border-slate-50 flex items-center justify-between">
-            <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Rincian Tagihan</h3>
-            <button onClick={fetchData} className="text-slate-400 hover:text-slate-600 transition-colors">
-              <RefreshCw className="w-3.5 h-3.5" />
-            </button>
-          </div>
-          <div className="divide-y divide-slate-50">
+        {/* Bill Summary */}
+        {details.length > 0 && (
+          <div className="bg-slate-50 rounded-2xl p-5 border border-slate-100 space-y-3 mt-6">
+            <div className="flex items-center justify-between text-xs text-slate-500 font-bold uppercase tracking-wider pb-2 border-b border-slate-200">
+              <span>Item</span>
+              <span>Subtotal</span>
+            </div>
             {details.map((item: any) => (
-              <div key={item.id_detail_pesanan} className="flex items-center justify-between px-4 py-3">
-                <div>
-                  <p className="text-sm font-semibold text-slate-800">{item.menu?.nama_menu}</p>
-                  <p className="text-[11px] text-slate-400">{item.jumlah} × Rp {Number(item.menu?.harga || 0).toLocaleString('id-ID')}</p>
-                </div>
-                <span className="text-sm font-bold text-slate-900">
-                  Rp {Number(item.subtotal).toLocaleString('id-ID')}
-                </span>
+              <div key={item.id_detail_pesanan} className="flex justify-between text-xs text-slate-700">
+                <span>{item.menu?.nama_menu} × {item.jumlah}</span>
+                <span className="font-semibold">Rp {Number(item.subtotal).toLocaleString('id-ID')}</span>
               </div>
             ))}
+            <div className="flex justify-between items-center pt-3 border-t border-slate-200 text-sm font-bold text-slate-900">
+              <span>Total Bill</span>
+              <span className="text-[#FA6338] text-base">Rp {total.toLocaleString('id-ID')}</span>
+            </div>
           </div>
-          <div className="px-4 py-3.5 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
-            <span className="font-bold text-slate-700 text-sm">Total Tagihan</span>
-            <span className="font-black text-orange-500 text-lg">Rp {total.toLocaleString('id-ID')}</span>
-          </div>
-        </div>
-      )}
+        )}
+      </div>
 
-      <Link
-        href={`/meja/${token}/status`}
-        className="block w-full py-3 bg-[#1e2d42] hover:bg-[#2b3a55] text-white font-bold rounded-2xl text-xs text-center transition-colors shadow-md"
-      >
-        Pantau Status Masakan &rarr;
-      </Link>
+      {/* Bottom Status Navigation Link */}
+      <div className="mt-8">
+        <Link
+          href={`/meja/${token}/status`}
+          className="block w-full py-4 bg-[#2B4263] hover:bg-[#1f3049] text-white font-bold rounded-2xl text-xs text-center transition-all shadow-md uppercase tracking-wider"
+        >
+          Pantau Status Masakan &rarr;
+        </Link>
+      </div>
     </div>
   );
 }
+

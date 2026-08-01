@@ -19,15 +19,16 @@ import { getMejaListAction } from '@/lib/actions/pelayan';
 import { logoutStaffAction } from '@/lib/actions/auth';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { ShieldCheck, LayoutDashboard, Users, Utensils, Table, FileText, Plus, Edit2, Trash2, LogOut, X } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
+import { LayoutDashboard, Users, Utensils, Table, FileText, Plus, Edit2, Trash2, LogOut, X, ArrowUpRight, Download } from 'lucide-react';
 import { PeranPegawai, StatusMenu, StatusMeja } from '@/lib/types/database';
 
 export default function ManagerPage() {
   const router = useRouter();
 
-  const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'USER' | 'MENU' | 'MEJA'>('DASHBOARD');
-  const [stats, setStats] = useState<any>({ totalPegawai: 0, totalPemasukan: 0, totalMeja: 0, mejaTerisi: 0, okupansiPersen: 0 });
+  const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'USER' | 'MENU' | 'MEJA' | 'LAPORAN'>('DASHBOARD');
+  const [stats, setStats] = useState<any>(null);
+  const [statsLoading, setStatsLoading] = useState(true);
   
   // Data lists
   const [pegawaiList, setPegawaiList] = useState<any[]>([]);
@@ -36,12 +37,12 @@ export default function ManagerPage() {
   const [loading, setLoading] = useState(false);
 
   // Modals state
-  const [showModal, setShowModal] = useState<string | null>(null); // 'USER' | 'MENU' | 'MEJA'
+  const [showModal, setShowModal] = useState<string | null>(null);
   const [editingItem, setEditingItem] = useState<any | null>(null);
 
   // Form states
   const [userForm, setUserForm] = useState({ nama: '', peran: 'pelayan' as PeranPegawai, username: '', password: '' });
-  const [menuForm, setMenuForm] = useState({ nama: '', harga: 15000, kategori: 'Food', status: 'tersedia' as StatusMenu });
+  const [menuForm, setMenuForm] = useState({ nama: '', harga: 15000, kategori: 'Makanan', status: 'tersedia' as StatusMenu });
   const [mejaForm, setMejaForm] = useState({ nomor: '', kapasitas: 4, status: 'tersedia' as StatusMeja });
 
   useEffect(() => {
@@ -52,8 +53,10 @@ export default function ManagerPage() {
   }, []);
 
   async function fetchStats() {
+    setStatsLoading(true);
     const data = await getDashboardStatsAction();
-    setStats(data);
+    if (data) setStats(data);
+    setStatsLoading(false);
   }
 
   async function fetchPegawai() {
@@ -137,181 +140,257 @@ export default function ManagerPage() {
     }
   }
 
-  // Recharts mock revenue dataset
-  const revenueChartData = [
-    { month: 'Juni', total: 45 },
-    { month: 'Juli', total: 68 },
-    { month: 'Agustus', total: 95 },
-    { month: 'September', total: 110 },
-    { month: 'Oktober', total: 140 },
-    { month: 'November', total: stats.totalPemasukan ? Math.round(stats.totalPemasukan / 1000000) : 85 },
-  ];
+  const ROLE_COLORS: Record<string, string> = {
+    pelayan: '#FA6338',
+    kasir: '#2B4263',
+    koki: '#9DB2FF',
+    manajer: '#FBB040',
+  };
 
-  const pieData = [
-    { name: 'Meja Terisi', value: stats.mejaTerisi || 1 },
-    { name: 'Meja Kosong', value: Math.max(1, stats.totalMeja - stats.mejaTerisi) },
-  ];
-  const COLORS = ['#ff6b4a', '#2b3a55'];
+  function formatRupiah(val: number) {
+    if (val >= 1_000_000_000) return `Rp ${(val / 1_000_000_000).toFixed(1)}M`;
+    if (val >= 1_000_000) return `Rp ${(val / 1_000_000).toFixed(1)}jt`;
+    if (val >= 1_000) return `Rp ${(val / 1_000).toFixed(0)}rb`;
+    return `Rp ${val.toLocaleString('id-ID')}`;
+  }
 
   return (
-    <div className="min-h-screen bg-slate-100 flex flex-col md:flex-row">
-      {/* Sidebar Navigation matching ui/Manager.png */}
-      <aside className="w-full md:w-64 bg-white border-r border-slate-200 p-6 flex flex-col justify-between shadow-sm">
+    <div className="min-h-screen bg-[#F4F6F9] flex flex-col md:flex-row text-slate-800">
+      {/* Sidebar Navigation matching Manager.png */}
+      <aside className="w-full md:w-64 bg-white border-r border-slate-200 p-6 flex flex-col justify-between md:min-h-screen shadow-sm">
         <div className="space-y-8">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-slate-900 p-1 flex items-center justify-center shadow">
-              <img src="/logo.png" alt="Logo Pak Resto" className="w-full h-full object-contain" />
+            <div className="w-9 h-9 bg-amber-400 rounded-full flex items-center justify-center p-1.5 shadow-sm">
+              <img src="/logo.png" alt="Pak Resto Logo" className="w-full h-full object-contain" />
             </div>
-            <div>
-              <span className="font-extrabold text-slate-800 text-base tracking-wider block">PAK RESTO.</span>
-              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Manajer Restoran</span>
-            </div>
+            <span className="font-extrabold text-lg tracking-wider text-[#FA6338] uppercase">
+              PAK RESTO.
+            </span>
           </div>
 
-          <nav className="space-y-1">
-            <button
-              onClick={() => setActiveTab('DASHBOARD')}
-              className={`w-full px-4 py-3 rounded-2xl text-xs font-bold flex items-center gap-3 transition ${
-                activeTab === 'DASHBOARD' ? 'bg-slate-900 text-[#ff6b4a] shadow-sm' : 'text-slate-500 hover:bg-slate-50'
-              }`}
-            >
-              <LayoutDashboard className="w-4 h-4" /> DASHBOARD
-            </button>
-            <button
-              onClick={() => setActiveTab('USER')}
-              className={`w-full px-4 py-3 rounded-2xl text-xs font-bold flex items-center gap-3 transition ${
-                activeTab === 'USER' ? 'bg-slate-900 text-[#ff6b4a] shadow-sm' : 'text-slate-500 hover:bg-slate-50'
-              }`}
-            >
-              <Users className="w-4 h-4" /> KELOLA USER
-            </button>
-            <button
-              onClick={() => setActiveTab('MENU')}
-              className={`w-full px-4 py-3 rounded-2xl text-xs font-bold flex items-center gap-3 transition ${
-                activeTab === 'MENU' ? 'bg-slate-900 text-[#ff6b4a] shadow-sm' : 'text-slate-500 hover:bg-slate-50'
-              }`}
-            >
-              <Utensils className="w-4 h-4" /> KELOLA MENU
-            </button>
-            <button
-              onClick={() => setActiveTab('MEJA')}
-              className={`w-full px-4 py-3 rounded-2xl text-xs font-bold flex items-center gap-3 transition ${
-                activeTab === 'MEJA' ? 'bg-slate-900 text-[#ff6b4a] shadow-sm' : 'text-slate-500 hover:bg-slate-50'
-              }`}
-            >
-              <Table className="w-4 h-4" /> KELOLA MEJA
-            </button>
+          <nav className="space-y-2">
+            {[
+              { key: 'DASHBOARD', label: 'DASHBOARD', icon: <LayoutDashboard className="w-4 h-4" /> },
+              { key: 'USER', label: 'KELOLA USER', icon: <Users className="w-4 h-4" /> },
+              { key: 'MENU', label: 'KELOLA MENU', icon: <Utensils className="w-4 h-4" /> },
+              { key: 'MEJA', label: 'KELOLA MEJA', icon: <Table className="w-4 h-4" /> },
+              { key: 'LAPORAN', label: 'LAPORAN', icon: <FileText className="w-4 h-4" /> },
+            ].map(({ key, label, icon }) => (
+              <button
+                key={key}
+                onClick={() => setActiveTab(key as any)}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-bold transition-all ${
+                  activeTab === key
+                    ? 'text-[#FA6338] bg-orange-50 font-extrabold'
+                    : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
+                }`}
+              >
+                {icon}
+                <span>{label}</span>
+              </button>
+            ))}
           </nav>
         </div>
 
         <button
           onClick={handleLogout}
-          className="w-full px-4 py-3 rounded-2xl text-xs font-bold text-slate-500 hover:bg-red-50 hover:text-red-600 flex items-center gap-3 transition mt-8"
+          className="flex items-center gap-2 text-xs font-bold text-slate-400 hover:text-red-500 transition-colors"
         >
-          <LogOut className="w-4 h-4" /> LOGOUT
+          <LogOut className="w-4 h-4" /> Log Out
         </button>
       </aside>
 
       {/* Main Content Area */}
-      <main className="flex-1 p-6 md:p-10 max-w-6xl w-full">
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h1 className="text-2xl font-extrabold text-slate-800 tracking-tight">Manager Dashboard</h1>
-            <p className="text-xs text-slate-400 mt-1">Laporan Operasional & Pengelolaan Data Master</p>
-          </div>
-        </div>
-
-        {/* DASHBOARD TAB matching ui/Manager.png */}
+      <main className="flex-1 p-6 md:p-10 space-y-6">
+        {/* DASHBOARD TAB matching Manager.png */}
         {activeTab === 'DASHBOARD' && (
-          <div className="space-y-8">
-            {/* Stats Summary */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="bg-slate-900 text-white p-6 rounded-3xl shadow-xl flex items-center justify-between">
+          <div className="space-y-6">
+            {statsLoading ? (
+              <div className="flex items-center justify-center h-64">
+                <div className="w-10 h-10 border-4 border-[#FA6338] border-t-transparent rounded-full animate-spin" />
+              </div>
+            ) : (
+              <>
+                {/* Page Header */}
                 <div>
-                  <p className="text-xs font-semibold text-slate-400">Total Pegawai</p>
-                  <h2 className="text-4xl font-black mt-2">{stats.totalPegawai}</h2>
+                  <h2 className="text-xl font-extrabold text-slate-800">Dashboard Strategis</h2>
+                  <p className="text-xs text-slate-400 mt-1">Ringkasan kinerja bisnis secara real-time</p>
                 </div>
-                <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center text-orange-400 font-bold">
-                  <Users className="w-6 h-6" />
-                </div>
-              </div>
 
-              <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex items-center justify-between">
-                <div>
-                  <p className="text-xs font-semibold text-slate-400">Total Pemasukan Bersih</p>
-                  <h2 className="text-3xl font-black text-slate-800 mt-2">
-                    Rp {Number(stats.totalPemasukan).toLocaleString('id-ID')}
-                  </h2>
-                </div>
-                <div className="w-12 h-12 bg-orange-50 rounded-2xl flex items-center justify-center text-[#ff6b4a]">
-                  <FileText className="w-6 h-6" />
-                </div>
-              </div>
+                {/* KPI Cards Row 1 */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                  {/* Total Pemasukan */}
+                  <div className="col-span-2 bg-[#1E293B] text-white rounded-3xl p-6 flex justify-between items-center shadow-lg">
+                    <div>
+                      <p className="text-xs font-semibold opacity-70 mb-1">Total Pemasukan</p>
+                      <p className="text-3xl md:text-4xl font-extrabold">{formatRupiah(stats?.totalPemasukan || 0)}</p>
+                      <p className="text-xs opacity-60 mt-1">dari {stats?.totalOrderKonfirmasi || 0} transaksi terkonfirmasi</p>
+                    </div>
+                    <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center flex-shrink-0">
+                      <ArrowUpRight className="w-6 h-6" />
+                    </div>
+                  </div>
 
-              <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex items-center justify-between">
-                <div>
-                  <p className="text-xs font-semibold text-slate-400">Okupansi Meja</p>
-                  <h2 className="text-3xl font-black text-slate-800 mt-2">
-                    {stats.okupansiPersen}% <span className="text-xs font-normal text-slate-400">({stats.mejaTerisi}/{stats.totalMeja})</span>
-                  </h2>
-                </div>
-                <div className="w-12 h-12 bg-blue-50 rounded-2xl flex items-center justify-center text-blue-600">
-                  <Table className="w-6 h-6" />
-                </div>
-              </div>
-            </div>
+                  {/* Avg Order Value */}
+                  <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm">
+                    <p className="text-xs font-semibold text-slate-400 mb-1">Rata-rata Nilai Order</p>
+                    <p className="text-2xl font-extrabold text-[#FA6338]">{formatRupiah(stats?.avgOrderValue || 0)}</p>
+                    <p className="text-xs text-slate-400 mt-1">per transaksi</p>
+                  </div>
 
-            {/* Recharts Analytics Charts matching ui/Manager.png */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="md:col-span-2 bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
-                <h3 className="text-sm font-bold text-slate-800 mb-6">Pendapatan Restoran (Dalam Juta)</h3>
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={revenueChartData}>
-                      <XAxis dataKey="month" stroke="#94a3b8" fontSize={12} />
-                      <YAxis stroke="#94a3b8" fontSize={12} />
-                      <Tooltip />
-                      <Bar dataKey="total" fill="#2b3a55" radius={[6, 6, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
+                  {/* Total Pegawai */}
+                  <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm">
+                    <p className="text-xs font-semibold text-slate-400 mb-1">Total Pegawai</p>
+                    <p className="text-2xl font-extrabold text-[#2B4263]">{stats?.totalPegawai || 0}</p>
+                    <p className="text-xs text-slate-400 mt-1">aktif di sistem</p>
+                  </div>
                 </div>
-              </div>
 
-              <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex flex-col justify-between">
-                <h3 className="text-sm font-bold text-slate-800 mb-2">Distribusi Okupansi Meja</h3>
-                <div className="h-48 flex items-center justify-center">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie data={pieData} innerRadius={50} outerRadius={70} paddingAngle={5} dataKey="value">
-                        {pieData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <Tooltip />
-                    </PieChart>
-                  </ResponsiveContainer>
+                {/* KPI Cards Row 2 */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                  {/* Meja Terisi */}
+                  <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm">
+                    <p className="text-xs font-semibold text-slate-400 mb-1">Meja Terisi</p>
+                    <p className="text-2xl font-extrabold text-slate-800">{stats?.mejaTerisi || 0}<span className="text-sm font-medium text-slate-400"> / {stats?.totalMeja || 0}</span></p>
+                    <div className="mt-2 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-[#FA6338] rounded-full transition-all"
+                        style={{ width: `${stats?.okupansiPersen || 0}%` }}
+                      />
+                    </div>
+                    <p className="text-xs text-slate-400 mt-1">Okupansi {stats?.okupansiPersen || 0}%</p>
+                  </div>
+
+                  {/* Meja Tersedia */}
+                  <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm">
+                    <p className="text-xs font-semibold text-slate-400 mb-1">Meja Tersedia</p>
+                    <p className="text-2xl font-extrabold text-emerald-500">{stats?.mejaTersedia ?? 0}</p>
+                    <p className="text-xs text-slate-400 mt-1">siap digunakan</p>
+                  </div>
+
+                  {/* Pembayaran Tunai */}
+                  <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm">
+                    <p className="text-xs font-semibold text-slate-400 mb-1">Bayar Tunai</p>
+                    <p className="text-2xl font-extrabold text-slate-800">{stats?.tunaiCount || 0}</p>
+                    <p className="text-xs text-slate-400 mt-1">transaksi</p>
+                  </div>
+
+                  {/* Pembayaran QRIS */}
+                  <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm">
+                    <p className="text-xs font-semibold text-slate-400 mb-1">Bayar QRIS</p>
+                    <p className="text-2xl font-extrabold text-[#9DB2FF]">{stats?.qrisCount || 0}</p>
+                    <p className="text-xs text-slate-400 mt-1">transaksi</p>
+                  </div>
                 </div>
-                <div className="flex justify-center gap-4 text-xs font-semibold text-slate-600">
-                  <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-[#ff6b4a]" /> Terisi ({stats.mejaTerisi})</span>
-                  <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-[#2b3a55]" /> Kosong ({stats.totalMeja - stats.mejaTerisi})</span>
+
+                {/* Charts Row */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  {/* 7-Day Revenue Bar Chart */}
+                  <div className="lg:col-span-2 bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
+                    <h3 className="text-xs font-bold text-slate-400 mb-1 uppercase tracking-wider">Pendapatan 7 Hari Terakhir</h3>
+                    <p className="text-xs text-slate-300 mb-5">Nilai transaksi terkonfirmasi per hari</p>
+                    <div className="h-52">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={stats?.revenueChartData || []}>
+                          <XAxis dataKey="hari" stroke="#94a3b8" fontSize={9} />
+                          <YAxis stroke="#94a3b8" fontSize={9} tickFormatter={(v) => v >= 1000 ? `${(v/1000).toFixed(0)}rb` : v} />
+                          <Tooltip formatter={(v: any) => [`Rp ${Number(v).toLocaleString('id-ID')}`, 'Pendapatan']} />
+                          <Bar dataKey="total" fill="#2B4263" radius={[6, 6, 0, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+
+                  {/* Role Distribution Pie */}
+                  <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
+                    <h3 className="text-xs font-bold text-slate-400 mb-1 uppercase tracking-wider">Distribusi Pegawai</h3>
+                    <p className="text-xs text-slate-300 mb-3">Per peran / jabatan</p>
+                    <div className="h-36">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={(stats?.roleDistribusi || []).filter((r: any) => r.count > 0)}
+                            innerRadius={30}
+                            outerRadius={55}
+                            paddingAngle={3}
+                            dataKey="count"
+                            nameKey="role"
+                          >
+                            {(stats?.roleDistribusi || []).map((entry: any) => (
+                              <Cell key={entry.role} fill={ROLE_COLORS[entry.role] || '#ccc'} />
+                            ))}
+                          </Pie>
+                          <Tooltip formatter={(v: any, name: string) => [v, name]} />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <div className="mt-2 space-y-1">
+                      {(stats?.roleDistribusi || []).map((r: any) => (
+                        <div key={r.role} className="flex items-center justify-between text-xs">
+                          <span className="flex items-center gap-1.5 capitalize text-slate-600">
+                            <span className="w-2 h-2 rounded-full" style={{ background: ROLE_COLORS[r.role] }} />
+                            {r.role}
+                          </span>
+                          <span className="font-bold text-slate-800">{r.count}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
+
+                {/* Top 5 Menu Terlaris */}
+                <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
+                  <h3 className="text-xs font-bold text-slate-400 mb-1 uppercase tracking-wider">Menu Terlaris</h3>
+                  <p className="text-xs text-slate-300 mb-5">Top 5 menu berdasarkan total kuantitas dipesan</p>
+                  {(stats?.topMenu || []).length === 0 ? (
+                    <p className="text-xs text-slate-300 italic">Belum ada data pesanan.</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {(stats?.topMenu || []).map((m: any, i: number) => {
+                        const maxVal = stats.topMenu[0]?.total || 1;
+                        const pct = Math.round((m.total / maxVal) * 100);
+                        return (
+                          <div key={m.nama}>
+                            <div className="flex justify-between items-center mb-1">
+                              <span className="flex items-center gap-2 text-xs font-semibold text-slate-700">
+                                <span className="w-5 h-5 rounded-full bg-slate-100 text-slate-500 font-bold text-[10px] flex items-center justify-center">{i + 1}</span>
+                                {m.nama}
+                                <span className="text-[10px] text-slate-400 font-normal capitalize">{m.kategori}</span>
+                              </span>
+                              <span className="text-xs font-bold text-[#FA6338]">{m.total}x</span>
+                            </div>
+                            <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                              <div
+                                className="h-full rounded-full transition-all"
+                                style={{ width: `${pct}%`, background: i === 0 ? '#FA6338' : '#2B4263' }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
           </div>
         )}
 
-        {/* KELOLA USER (PEGAWAI) TAB matching ui/Manager.png */}
+        {/* KELOLA USER TAB matching Manager.png */}
         {activeTab === 'USER' && (
           <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-6">
             <div className="flex items-center justify-between">
-              <h2 className="text-base font-bold text-slate-800">Daftar Akun Pegawai</h2>
+              <div className="flex items-center gap-3 text-xs text-slate-400">
+                <span>Show 10 entries</span>
+                <input type="text" placeholder="Cari..." className="px-3 py-1.5 rounded-xl border border-slate-200 bg-slate-50" />
+              </div>
               <button
                 onClick={() => {
                   setEditingItem(null);
                   setUserForm({ nama: '', peran: 'pelayan', username: '', password: '' });
                   setShowModal('USER');
                 }}
-                className="px-4 py-2 bg-[#ff6b4a] hover:bg-orange-600 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow"
+                className="px-5 py-2.5 bg-[#FA6338] hover:bg-orange-600 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm"
               >
                 <Plus className="w-4 h-4" /> Tambah User
               </button>
@@ -319,44 +398,42 @@ export default function ManagerPage() {
 
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
-                <thead className="bg-slate-50 text-slate-400 uppercase text-[10px]">
-                  <tr>
-                    <th className="py-3 px-4">Nama Pegawai</th>
-                    <th className="py-3 px-4">Username</th>
-                    <th className="py-3 px-4">Peran (Role)</th>
-                    <th className="py-3 px-4 text-right">Aksi</th>
+                <thead>
+                  <tr className="border-b border-slate-200 text-slate-400 font-bold">
+                    <th className="pb-3">User Id</th>
+                    <th className="pb-3">Username</th>
+                    <th className="pb-3">Nama User</th>
+                    <th className="pb-3">Role</th>
+                    <th className="pb-3 text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-medium">
-                  {pegawaiList.map((p) => (
+                  {pegawaiList.map((p, idx) => (
                     <tr key={p.id_pegawai}>
-                      <td className="py-3.5 px-4 font-bold text-slate-800">{p.nama_pegawai}</td>
-                      <td className="py-3.5 px-4 text-slate-600">{p.username}</td>
-                      <td className="py-3.5 px-4">
-                        <span className="px-2.5 py-1 bg-slate-100 text-slate-800 font-bold rounded-full uppercase text-[10px]">
-                          {p.peran}
-                        </span>
-                      </td>
-                      <td className="py-3.5 px-4 text-right">
+                      <td className="py-4">#{p.id_pegawai.slice(0, 5)}</td>
+                      <td className="py-4 font-semibold">{p.username}</td>
+                      <td className="py-4 font-bold text-slate-800">{p.nama_pegawai}</td>
+                      <td className="py-4 uppercase text-[10px] font-bold text-slate-600">{p.peran}</td>
+                      <td className="py-4 text-right">
                         <button
                           onClick={() => {
                             setEditingItem(p);
                             setUserForm({ nama: p.nama_pegawai, peran: p.peran, username: p.username, password: '' });
                             setShowModal('USER');
                           }}
-                          className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg mr-1"
+                          className="p-1.5 text-orange-500 hover:bg-orange-50 rounded-lg mr-1"
                         >
                           <Edit2 className="w-4 h-4" />
                         </button>
                         <button
                           onClick={async () => {
-                            if (confirm(`Hapus pegawai ${p.nama_pegawai}?`)) {
+                            if (confirm(`Hapus user ${p.nama_pegawai}?`)) {
                               await deletePegawaiAction(p.id_pegawai);
-                              toast.success('Pegawai dihapus');
+                              toast.success('User dihapus');
                               fetchPegawai();
                             }
                           }}
-                          className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg"
+                          className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -369,18 +446,21 @@ export default function ManagerPage() {
           </div>
         )}
 
-        {/* KELOLA MENU TAB matching ui/Manager.png */}
+        {/* KELOLA MENU TAB matching Manager.png */}
         {activeTab === 'MENU' && (
           <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-6">
             <div className="flex items-center justify-between">
-              <h2 className="text-base font-bold text-slate-800">Daftar Master Menu Restoran</h2>
+              <div className="flex items-center gap-3 text-xs text-slate-400">
+                <span>Show 10 entries</span>
+                <input type="text" placeholder="Cari..." className="px-3 py-1.5 rounded-xl border border-slate-200 bg-slate-50" />
+              </div>
               <button
                 onClick={() => {
                   setEditingItem(null);
-                  setMenuForm({ nama: '', harga: 15000, kategori: 'Food', status: 'tersedia' });
+                  setMenuForm({ nama: '', harga: 15000, kategori: 'Makanan', status: 'tersedia' });
                   setShowModal('MENU');
                 }}
-                className="px-4 py-2 bg-[#ff6b4a] hover:bg-orange-600 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow"
+                className="px-5 py-2.5 bg-[#FA6338] hover:bg-orange-600 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm"
               >
                 <Plus className="w-4 h-4" /> Tambah Menu
               </button>
@@ -388,34 +468,30 @@ export default function ManagerPage() {
 
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
-                <thead className="bg-slate-50 text-slate-400 uppercase text-[10px]">
-                  <tr>
-                    <th className="py-3 px-4">Nama Menu</th>
-                    <th className="py-3 px-4">Kategori</th>
-                    <th className="py-3 px-4">Harga</th>
-                    <th className="py-3 px-4">Status</th>
-                    <th className="py-3 px-4 text-right">Aksi</th>
+                <thead>
+                  <tr className="border-b border-slate-200 text-slate-400 font-bold">
+                    <th className="pb-3">Menu Id</th>
+                    <th className="pb-3">Nama menu</th>
+                    <th className="pb-3">Kategori</th>
+                    <th className="pb-3">Harga</th>
+                    <th className="pb-3 text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-medium">
                   {menuList.map((m) => (
                     <tr key={m.id_menu}>
-                      <td className="py-3.5 px-4 font-bold text-slate-800">{m.nama_menu}</td>
-                      <td className="py-3.5 px-4 text-slate-600">{m.kategori}</td>
-                      <td className="py-3.5 px-4 font-bold text-[#ff6b4a]">Rp {Number(m.harga).toLocaleString('id-ID')}</td>
-                      <td className="py-3.5 px-4">
-                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${m.status_ketersediaan === 'tersedia' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
-                          {m.status_ketersediaan}
-                        </span>
-                      </td>
-                      <td className="py-3.5 px-4 text-right">
+                      <td className="py-4">#{m.id_menu.slice(0, 5)}</td>
+                      <td className="py-4 font-bold text-slate-800">{m.nama_menu}</td>
+                      <td className="py-4">{m.kategori}</td>
+                      <td className="py-4 font-bold text-[#FA6338]">Rp {Number(m.harga).toLocaleString('id-ID')}</td>
+                      <td className="py-4 text-right">
                         <button
                           onClick={() => {
                             setEditingItem(m);
                             setMenuForm({ nama: m.nama_menu, harga: Number(m.harga), kategori: m.kategori, status: m.status_ketersediaan });
                             setShowModal('MENU');
                           }}
-                          className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg mr-1"
+                          className="p-1.5 text-orange-500 hover:bg-orange-50 rounded-lg mr-1"
                         >
                           <Edit2 className="w-4 h-4" />
                         </button>
@@ -427,7 +503,7 @@ export default function ManagerPage() {
                               fetchMenu();
                             }
                           }}
-                          className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg"
+                          className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -440,83 +516,146 @@ export default function ManagerPage() {
           </div>
         )}
 
-        {/* KELOLA MEJA TAB matching ui/Manager.png */}
+        {/* KELOLA MEJA TAB matching Manager.png */}
         {activeTab === 'MEJA' && (
           <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-6">
             <div className="flex items-center justify-between">
-              <h2 className="text-base font-bold text-slate-800">Daftar Meja Restoran</h2>
+              <div className="flex items-center gap-3 text-xs text-slate-400">
+                <span>Show 10 entries</span>
+                <input type="text" placeholder="Cari..." className="px-3 py-1.5 rounded-xl border border-slate-200 bg-slate-50" />
+              </div>
               <button
                 onClick={() => {
                   setEditingItem(null);
                   setMejaForm({ nomor: '', kapasitas: 4, status: 'tersedia' });
                   setShowModal('MEJA');
                 }}
-                className="px-4 py-2 bg-[#ff6b4a] hover:bg-orange-600 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow"
+                className="px-5 py-2.5 bg-[#FA6338] hover:bg-orange-600 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm"
               >
                 <Plus className="w-4 h-4" /> Tambah Meja
               </button>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
-              {mejaList.map((m) => (
-                <div key={m.id_meja} className="bg-slate-50 p-4 rounded-2xl border border-slate-200 text-center flex flex-col items-center justify-between">
-                  <span className="text-2xl font-extrabold text-slate-800">{m.nomor_meja}</span>
-                  <span className="text-xs text-slate-500 font-medium my-1">Kapasitas: {m.kapasitas} orang</span>
-                  <div className="flex gap-1 mt-2">
-                    <button
-                      onClick={() => {
-                        setEditingItem(m);
-                        setMejaForm({ nomor: m.nomor_meja, kapasitas: m.kapasitas, status: m.status_ketersediaan });
-                        setShowModal('MEJA');
-                      }}
-                      className="p-1 bg-white border rounded text-blue-600"
-                    >
-                      <Edit2 className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={async () => {
-                        if (confirm(`Hapus Meja ${m.nomor_meja}?`)) {
-                          await deleteMejaAction(m.id_meja);
-                          toast.success('Meja dihapus');
-                          fetchMeja();
-                        }
-                      }}
-                      className="p-1 bg-white border rounded text-red-600"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-              ))}
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-slate-200 text-slate-400 font-bold">
+                    <th className="pb-3">Meja Id</th>
+                    <th className="pb-3">Nomor Meja</th>
+                    <th className="pb-3">Status</th>
+                    <th className="pb-3 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 font-medium">
+                  {mejaList.map((m) => (
+                    <tr key={m.id_meja}>
+                      <td className="py-4">#{m.id_meja.slice(0, 5)}</td>
+                      <td className="py-4 font-extrabold text-slate-800">{m.nomor_meja}</td>
+                      <td className="py-4">
+                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                          m.status_ketersediaan === 'tersedia' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
+                        }`}>
+                          {m.status_ketersediaan}
+                        </span>
+                      </td>
+                      <td className="py-4 text-right">
+                        <button
+                          onClick={() => {
+                            setEditingItem(m);
+                            setMejaForm({ nomor: m.nomor_meja, kapasitas: m.kapasitas, status: m.status_ketersediaan });
+                            setShowModal('MEJA');
+                          }}
+                          className="p-1.5 text-orange-500 hover:bg-orange-50 rounded-lg mr-1"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={async () => {
+                            if (confirm(`Hapus Meja ${m.nomor_meja}?`)) {
+                              await deleteMejaAction(m.id_meja);
+                              toast.success('Meja dihapus');
+                              fetchMeja();
+                            }
+                          }}
+                          className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* LAPORAN TAB matching Manager.png */}
+        {activeTab === 'LAPORAN' && (
+          <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3 text-xs text-slate-400">
+                <span>Show 10 entries</span>
+                <input type="text" placeholder="Cari..." className="px-3 py-1.5 rounded-xl border border-slate-200 bg-slate-50" />
+              </div>
+              <button
+                onClick={() => toast.success('Laporan berhasil dieksport ke format Excel!')}
+                className="px-5 py-2.5 bg-[#FA6338] hover:bg-orange-600 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm"
+              >
+                <Download className="w-4 h-4" /> Eksport Laporan
+              </button>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-slate-200 text-slate-400 font-bold">
+                    <th className="pb-3">Meja Id</th>
+                    <th className="pb-3">Nomor Meja</th>
+                    <th className="pb-3">Status</th>
+                    <th className="pb-3">Tanggal</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 font-medium">
+                  {mejaList.map((m) => (
+                    <tr key={m.id_meja}>
+                      <td className="py-4">#{m.id_meja.slice(0, 5)}</td>
+                      <td className="py-4 font-bold">{m.nomor_meja}</td>
+                      <td className="py-4 capitalize">{m.status_ketersediaan}</td>
+                      <td className="py-4 text-slate-400">Hari ini</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
         )}
 
         {/* MODAL USER FORM */}
         {showModal === 'USER' && (
-          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="font-bold text-slate-800">{editingItem ? 'Edit Pegawai' : 'Tambah Pegawai Baru'}</h3>
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-4">
+              <div className="flex justify-between items-center">
+                <h3 className="font-bold text-slate-800">{editingItem ? 'Edit Pegawai' : 'Tambah User Baru'}</h3>
                 <button onClick={() => setShowModal(null)}><X className="w-5 h-5 text-slate-400" /></button>
               </div>
-              <form onSubmit={handleSaveUser} className="space-y-4 text-xs">
+              <form onSubmit={handleSaveUser} className="space-y-4 text-xs font-semibold text-slate-600">
                 <div>
-                  <label className="block text-slate-500 font-semibold mb-1">Nama Pegawai</label>
+                  <label className="block mb-1">Nama Pegawai</label>
                   <input
                     type="text"
                     required
                     value={userForm.nama}
                     onChange={(e) => setUserForm({ ...userForm, nama: e.target.value })}
-                    className="w-full p-2.5 border rounded-xl"
+                    className="w-full p-3 border rounded-2xl bg-slate-50"
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-500 font-semibold mb-1">Role (Peran)</label>
+                  <label className="block mb-1">Role (Peran)</label>
                   <select
                     value={userForm.peran}
                     onChange={(e) => setUserForm({ ...userForm, peran: e.target.value as PeranPegawai })}
-                    className="w-full p-2.5 border rounded-xl bg-white"
+                    className="w-full p-3 border rounded-2xl bg-slate-50"
                   >
                     <option value="pelayan">Pelayan</option>
                     <option value="kasir">Kasir</option>
@@ -525,27 +664,25 @@ export default function ManagerPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-slate-500 font-semibold mb-1">Username</label>
+                  <label className="block mb-1">Username</label>
                   <input
                     type="text"
                     required
                     value={userForm.username}
                     onChange={(e) => setUserForm({ ...userForm, username: e.target.value })}
-                    className="w-full p-2.5 border rounded-xl"
+                    className="w-full p-3 border rounded-2xl bg-slate-50"
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-500 font-semibold mb-1">
-                    {editingItem ? 'Password Baru (Kosongkan jika tidak diubah)' : 'Password'}
-                  </label>
+                  <label className="block mb-1">Password</label>
                   <input
                     type="password"
                     value={userForm.password}
                     onChange={(e) => setUserForm({ ...userForm, password: e.target.value })}
-                    className="w-full p-2.5 border rounded-xl"
+                    className="w-full p-3 border rounded-2xl bg-slate-50"
                   />
                 </div>
-                <button type="submit" disabled={loading} className="w-full py-3 bg-[#ff6b4a] text-white font-bold rounded-xl">
+                <button type="submit" disabled={loading} className="w-full py-3.5 bg-[#FA6338] text-white font-bold rounded-2xl uppercase">
                   Simpan Pegawai
                 </button>
               </form>
@@ -553,59 +690,58 @@ export default function ManagerPage() {
           </div>
         )}
 
-        {/* MODAL MENU FORM */}
+        {/* MODAL MENU FORM (Strictly Makanan & Minuman) */}
         {showModal === 'MENU' && (
-          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl">
-              <div className="flex justify-between items-center mb-4">
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-4">
+              <div className="flex justify-between items-center">
                 <h3 className="font-bold text-slate-800">{editingItem ? 'Edit Menu' : 'Tambah Menu Baru'}</h3>
                 <button onClick={() => setShowModal(null)}><X className="w-5 h-5 text-slate-400" /></button>
               </div>
-              <form onSubmit={handleSaveMenu} className="space-y-4 text-xs">
+              <form onSubmit={handleSaveMenu} className="space-y-4 text-xs font-semibold text-slate-600">
                 <div>
-                  <label className="block text-slate-500 font-semibold mb-1">Nama Menu</label>
+                  <label className="block mb-1">Nama Menu</label>
                   <input
                     type="text"
                     required
                     value={menuForm.nama}
                     onChange={(e) => setMenuForm({ ...menuForm, nama: e.target.value })}
-                    className="w-full p-2.5 border rounded-xl"
+                    className="w-full p-3 border rounded-2xl bg-slate-50"
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-500 font-semibold mb-1">Harga (Rp)</label>
+                  <label className="block mb-1">Harga (Rp)</label>
                   <input
                     type="number"
                     required
                     value={menuForm.harga}
                     onChange={(e) => setMenuForm({ ...menuForm, harga: Number(e.target.value) })}
-                    className="w-full p-2.5 border rounded-xl"
+                    className="w-full p-3 border rounded-2xl bg-slate-50"
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-500 font-semibold mb-1">Kategori</label>
+                  <label className="block mb-1">Kategori</label>
                   <select
                     value={menuForm.kategori}
                     onChange={(e) => setMenuForm({ ...menuForm, kategori: e.target.value })}
-                    className="w-full p-2.5 border rounded-xl bg-white"
+                    className="w-full p-3 border rounded-2xl bg-slate-50"
                   >
-                    <option value="Food">Food</option>
-                    <option value="Drink">Drink</option>
-                    <option value="Dessert">Dessert</option>
+                    <option value="Makanan">Makanan</option>
+                    <option value="Minuman">Minuman</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-slate-500 font-semibold mb-1">Status Ketersediaan</label>
+                  <label className="block mb-1">Status Ketersediaan</label>
                   <select
                     value={menuForm.status}
                     onChange={(e) => setMenuForm({ ...menuForm, status: e.target.value as StatusMenu })}
-                    className="w-full p-2.5 border rounded-xl bg-white"
+                    className="w-full p-3 border rounded-2xl bg-slate-50"
                   >
                     <option value="tersedia">Tersedia</option>
                     <option value="habis">Habis</option>
                   </select>
                 </div>
-                <button type="submit" disabled={loading} className="w-full py-3 bg-[#ff6b4a] text-white font-bold rounded-xl">
+                <button type="submit" disabled={loading} className="w-full py-3.5 bg-[#FA6338] text-white font-bold rounded-2xl uppercase">
                   Simpan Menu
                 </button>
               </form>
@@ -615,36 +751,36 @@ export default function ManagerPage() {
 
         {/* MODAL MEJA FORM */}
         {showModal === 'MEJA' && (
-          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl">
-              <div className="flex justify-between items-center mb-4">
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-4">
+              <div className="flex justify-between items-center">
                 <h3 className="font-bold text-slate-800">{editingItem ? 'Edit Meja' : 'Tambah Meja Baru'}</h3>
                 <button onClick={() => setShowModal(null)}><X className="w-5 h-5 text-slate-400" /></button>
               </div>
-              <form onSubmit={handleSaveMeja} className="space-y-4 text-xs">
+              <form onSubmit={handleSaveMeja} className="space-y-4 text-xs font-semibold text-slate-600">
                 <div>
-                  <label className="block text-slate-500 font-semibold mb-1">Nomor Meja</label>
+                  <label className="block mb-1">Nomor Meja</label>
                   <input
                     type="text"
                     required
                     placeholder="Contoh: 11"
                     value={mejaForm.nomor}
                     onChange={(e) => setMejaForm({ ...mejaForm, nomor: e.target.value })}
-                    className="w-full p-2.5 border rounded-xl"
+                    className="w-full p-3 border rounded-2xl bg-slate-50"
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-500 font-semibold mb-1">Kapasitas (Orang)</label>
+                  <label className="block mb-1">Kapasitas (Orang)</label>
                   <input
                     type="number"
                     required
                     min={1}
                     value={mejaForm.kapasitas}
                     onChange={(e) => setMejaForm({ ...mejaForm, kapasitas: Number(e.target.value) })}
-                    className="w-full p-2.5 border rounded-xl"
+                    className="w-full p-3 border rounded-2xl bg-slate-50"
                   />
                 </div>
-                <button type="submit" disabled={loading} className="w-full py-3 bg-[#ff6b4a] text-white font-bold rounded-xl">
+                <button type="submit" disabled={loading} className="w-full py-3.5 bg-[#FA6338] text-white font-bold rounded-2xl uppercase">
                   Simpan Meja
                 </button>
               </form>
@@ -655,3 +791,4 @@ export default function ManagerPage() {
     </div>
   );
 }
+
