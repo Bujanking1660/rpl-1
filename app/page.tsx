@@ -1,65 +1,66 @@
-import Image from "next/image";
+import Link from 'next/link';
+import { getStaffSession } from '@/lib/auth/session';
+import { redirect } from 'next/navigation';
+import { Utensils, Users, Receipt, ChefHat, ShieldCheck, ArrowRight } from 'lucide-react';
 
-export default function Home() {
+export default async function Home() {
+  const session = await getStaffSession();
+
+  if (session) {
+    redirect(`/${session.peran}`);
+  }
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div className="min-h-screen bg-slate-900 text-white flex flex-col items-center justify-center p-6">
+      <div className="max-w-3xl w-full text-center space-y-8">
+        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-sm font-medium mb-2">
+          <Utensils className="w-4 h-4 text-orange-400" /> Pak Resto UNIKOM Operational System
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+
+        <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight">
+          Sistem Informasi Manajemen Restoran
+        </h1>
+        
+        <p className="text-slate-400 text-lg max-w-xl mx-auto">
+          Portal terintegrasi untuk Pelayan, Kasir, Koki, Manajer, dan Pemesanan Mandiri Pelanggan.
+        </p>
+
+        <div className="flex flex-wrap justify-center gap-4 pt-4">
+          <Link
+            href="/login"
+            className="px-8 py-4 bg-[#ff6b4a] hover:bg-orange-600 text-white font-bold rounded-full shadow-lg shadow-orange-500/25 transition duration-200 flex items-center gap-2 text-lg"
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+            Masuk Akun Pegawai <ArrowRight className="w-5 h-5" />
+          </Link>
         </div>
-      </main>
+
+        {/* Quick Role Portal Cards */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-12">
+          <Link href="/login" className="bg-slate-800/80 border border-slate-700 hover:border-orange-500/50 p-5 rounded-2xl transition group text-left">
+            <Users className="w-8 h-8 text-orange-400 mb-3 group-hover:scale-110 transition" />
+            <h3 className="font-bold text-slate-200">Pelayan</h3>
+            <p className="text-xs text-slate-400 mt-1">Kedatangan, Meja & Penyajian</p>
+          </Link>
+
+          <Link href="/login" className="bg-slate-800/80 border border-slate-700 hover:border-orange-500/50 p-5 rounded-2xl transition group text-left">
+            <Receipt className="w-8 h-8 text-blue-400 mb-3 group-hover:scale-110 transition" />
+            <h3 className="font-bold text-slate-200">Kasir</h3>
+            <p className="text-xs text-slate-400 mt-1">Validasi & Pembayaran</p>
+          </Link>
+
+          <Link href="/login" className="bg-slate-800/80 border border-slate-700 hover:border-orange-500/50 p-5 rounded-2xl transition group text-left">
+            <ChefHat className="w-8 h-8 text-emerald-400 mb-3 group-hover:scale-110 transition" />
+            <h3 className="font-bold text-slate-200">Koki</h3>
+            <p className="text-xs text-slate-400 mt-1">Antrian Pesanan Dapur</p>
+          </Link>
+
+          <Link href="/login" className="bg-slate-800/80 border border-slate-700 hover:border-orange-500/50 p-5 rounded-2xl transition group text-left">
+            <ShieldCheck className="w-8 h-8 text-purple-400 mb-3 group-hover:scale-110 transition" />
+            <h3 className="font-bold text-slate-200">Manager</h3>
+            <p className="text-xs text-slate-400 mt-1">Dashboard & Data Master</p>
+          </Link>
+        </div>
+      </div>
     </div>
   );
 }
