@@ -8,11 +8,13 @@ export default async function Home() {
 
   if (session) {
     redirect(`/${session.peran}`);
+  } else {
+    redirect('/login');
   }
 
 
   return (
-    <div className="min-h-screen bg-slate-900 text-white flex flex-col items-center justify-center p-6">
+    <div className="min-h-screen bg-white text-gray-800 flex flex-col items-center justify-center p-6">
       <div className="max-w-3xl w-full text-center space-y-8">
         <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-sm font-medium mb-2">
           <Utensils className="w-4 h-4 text-orange-400" /> Pak Resto UNIKOM Operational System

@@ -1,76 +1,125 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { getMejaListAction, alokasikanMejaAction, bersihkanMejaAction } from '@/lib/actions/pelayan';
 import { logoutStaffAction } from '@/lib/actions/auth';
 import { useRouter } from 'next/navigation';
 import { Meja } from '@/lib/types/database';
 import { toast } from 'sonner';
-import { LogOut, ArrowRight, ArrowLeft, QrCode, Sparkles, RefreshCw } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { QRCodeSVG } from 'qrcode.react';
-import { motion, AnimatePresence } from 'framer-motion';
+
+type Tab = 'ALOKASI' | 'STATUS';
+type AlokasiStep = 1 | 2; // 1 = input jumlah, 2 = pilih meja
 
 export default function PelayanPage() {
   const router = useRouter();
 
-  const [mainTab, setMainTab] = useState<'ALOKASI' | 'STATUS'>('ALOKASI');
-  const [step, setStep] = useState<1 | 2 | 3>(1);
+  // ── Navigation ──────────────────────────────────────────────────────────────
+  const [activeTab, setActiveTab] = useState<Tab>('ALOKASI');
+
+  // ── Alokasi state ────────────────────────────────────────────────────────────
+  const [alokasiStep, setAlokasiStep] = useState<AlokasiStep>(1);
   const [jumlahPelanggan, setJumlahPelanggan] = useState(0);
-  const [mejaList, setMejaList] = useState<Meja[]>([]);
+  const [inputStr, setInputStr] = useState('0');
   const [selectedMejaId, setSelectedMejaId] = useState<string | null>(null);
-  const [allocatedToken, setAllocatedToken] = useState<string | null>(null);
-  const [allocatedMejaNomor, setAllocatedMejaNomor] = useState<string>('');
+
+  // ── Global data ──────────────────────────────────────────────────────────────
+  const [mejaList, setMejaList] = useState<Meja[]>([]);
+  const [isFetching, setIsFetching] = useState(false);
+  const [allocatedTokens, setAllocatedTokens] = useState<Record<string, string>>({});
+
+  // ── Modals ───────────────────────────────────────────────────────────────────
   const [showConfirmModal, setShowConfirmModal] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [isAllocating, setIsAllocating] = useState(false);
+  const [qrModalMeja, setQrModalMeja] = useState<Meja | null>(null);
+  const [isCleaning, setIsCleaning] = useState(false);
+
+  // ── Realtime fetch ───────────────────────────────────────────────────────────
+  const fetchMejaList = useCallback(async () => {
+    setIsFetching(true);
+    const res = await getMejaListAction();
+    if (res.success && res.data) setMejaList(res.data as Meja[]);
+    setIsFetching(false);
+  }, []);
 
   useEffect(() => {
     fetchMejaList();
-
     const supabase = createClient();
     const channel = supabase
-      .channel('pelayan-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'meja' }, () => fetchMejaList())
+      .channel('pelayan-meja')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'meja' }, fetchMejaList)
       .subscribe();
-
     return () => { supabase.removeChannel(channel); };
-  }, []);
+  }, [fetchMejaList]);
 
-  async function fetchMejaList() {
-    const res = await getMejaListAction();
-    if (res.success && res.data) setMejaList(res.data as Meja[]);
+  // ── Handlers ─────────────────────────────────────────────────────────────────
+  function handleTabChange(tab: Tab) {
+    setActiveTab(tab);
+    // H3: User control – preserve context when switching tabs
+    if (tab === 'ALOKASI') setAlokasiStep(1); // reset step only when going back to alokasi
+  }
+
+  function handleInputChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const raw = e.target.value.replace(/[^0-9]/g, '');
+    if (raw === '') {
+      setInputStr('');
+      setJumlahPelanggan(0);
+    } else {
+      const num = parseInt(raw, 10);
+      setInputStr(String(num)); // strips leading zeros
+      setJumlahPelanggan(num);
+    }
+  }
+
+  function adjustCount(delta: number) {
+    const next = Math.max(0, jumlahPelanggan + delta);
+    setJumlahPelanggan(next);
+    setInputStr(String(next));
   }
 
   async function handleAlokasikanMeja() {
-    if (!selectedMejaId) { toast.error('Pilih meja terlebih dahulu'); return; }
-
-    const targetMeja = mejaList.find((m) => m.id_meja === selectedMejaId);
+    if (!selectedMejaId) return;
+    const targetMeja = mejaList.find(m => m.id_meja === selectedMejaId);
     if (!targetMeja) return;
 
-    setLoading(true);
-    const res = await alokasikanMejaAction(selectedMejaId, jumlahPelanggan || 2);
-    setLoading(false);
+    setIsAllocating(true);
+    const res = await alokasikanMejaAction(selectedMejaId, jumlahPelanggan);
+    setIsAllocating(false);
 
     if (res.success && res.token_sesi) {
-      setAllocatedToken(res.token_sesi);
-      setAllocatedMejaNomor(targetMeja.nomor_meja);
+      setAllocatedTokens(prev => ({ ...prev, [targetMeja.id_meja]: res.token_sesi as string }));
       setShowConfirmModal(false);
-      setStep(3);
+      setQrModalMeja(targetMeja);
+      // H1: Visibility – success toast with table name
       toast.success(`Meja ${targetMeja.nomor_meja} berhasil diaktifkan!`);
       fetchMejaList();
+      // Reset alokasi flow for next session
+      setSelectedMejaId(null);
+      setAlokasiStep(1);
+      setJumlahPelanggan(0);
+      setInputStr('0');
     } else {
-      toast.error(res.error || 'Gagal mengalokasikan meja');
+      // H9: Help users recover from errors – descriptive message
+      toast.error(res.error || 'Gagal mengalokasikan meja. Coba lagi.');
     }
   }
 
   async function handleBersihkanMeja(id_meja: string, nomor: string) {
-    if (!confirm(`Bersihkan Meja ${nomor} dan ubah status menjadi tersedia?`)) return;
+    setIsCleaning(true);
     const res = await bersihkanMejaAction(id_meja);
+    setIsCleaning(false);
     if (res.success) {
+      setAllocatedTokens(prev => {
+        const next = { ...prev };
+        delete next[id_meja];
+        return next;
+      });
       toast.success(`Meja ${nomor} sekarang tersedia`);
+      setQrModalMeja(null);
       fetchMejaList();
     } else {
-      toast.error(res.error || 'Gagal membersihkan meja');
+      toast.error(res.error || 'Gagal membersihkan meja. Coba lagi.');
     }
   }
 
@@ -79,255 +128,407 @@ export default function PelayanPage() {
     router.push('/login');
   }
 
-  const customerUrl = allocatedToken
-    ? `${typeof window !== 'undefined' ? window.location.origin : ''}/meja/${allocatedToken}/menu`
-    : '';
+  // ── Meja helpers ─────────────────────────────────────────────────────────────
+  function getMejaState(m: Meja) {
+    const isOccupied = m.status_ketersediaan === 'terisi';
+    const canFit = m.kapasitas >= jumlahPelanggan;
+    const isSelected = m.id_meja === selectedMejaId;
+    return { isOccupied, canFit, isSelected, isDisabled: isOccupied || !canFit };
+  }
+
+  function getMejaClass(m: Meja): string {
+    const { isOccupied, canFit, isSelected } = getMejaState(m);
+    if (isSelected) return 'bg-[#FA6338] text-white ring-2 ring-orange-300 scale-105';
+    if (isOccupied || !canFit) return 'bg-[#C0C0C0] text-[#888] cursor-not-allowed opacity-60';
+    return 'bg-[#262626] text-white hover:bg-[#3a3a3a] active:scale-95';
+  }
+
+  function getMejaLabel(m: Meja): string {
+    const { isOccupied, canFit } = getMejaState(m);
+    if (isOccupied) return 'Terisi';
+    if (!canFit) return `Maks ${m.kapasitas}`;
+    return `${m.kapasitas} org`;
+  }
+
+  function getStatusMejaClass(m: Meja): string {
+    if (m.status_ketersediaan === 'terisi') return 'bg-[#FA6338] text-white hover:bg-orange-600 active:scale-95';
+    return 'bg-[#262626] text-white hover:bg-[#3a3a3a] active:scale-95';
+  }
+
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+
+  // Derived counts for status badge (H1: system status visibility)
+  const terisiCount = mejaList.filter(m => m.status_ketersediaan === 'terisi').length;
+  const tersediaCount = mejaList.filter(m => m.status_ketersediaan === 'tersedia').length;
 
   return (
-    <div className="min-h-screen bg-[#35485E] p-4 md:p-8 flex flex-col items-center justify-between relative">
-      {/* Top Bar with Navigation Tabs & Logout */}
-      <div className="w-full max-w-2xl flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2 bg-white/10 p-1 rounded-2xl border border-white/20 backdrop-blur-md">
-          <button
-            onClick={() => setMainTab('ALOKASI')}
-            className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
-              mainTab === 'ALOKASI' ? 'bg-[#FA6338] text-white shadow-md' : 'text-slate-200 hover:text-white'
-            }`}
-          >
-            <QrCode className="w-4 h-4" /> Alokasi Meja
-          </button>
-          <button
-            onClick={() => setMainTab('STATUS')}
-            className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
-              mainTab === 'STATUS' ? 'bg-[#FA6338] text-white shadow-md' : 'text-slate-200 hover:text-white'
-            }`}
-          >
-            <Sparkles className="w-4 h-4" /> Kelola Status Meja
-          </button>
-        </div>
+    <div className="min-h-screen bg-[#4A4A4A] flex flex-col items-center justify-center gap-4 p-6">
 
-        <div className="flex items-center gap-2">
-          <button onClick={fetchMejaList} className="p-2 text-white/80 hover:text-white bg-white/10 rounded-xl">
-            <RefreshCw className="w-4 h-4" />
+      {/* ── NAV MENU (H4 Consistency, H6 Recognition, H1 Status) ─────────────── */}
+      <div className="w-full max-w-xl">
+        {/* Tab switcher */}
+        <div className="flex items-center bg-[#2B4263] rounded-2xl p-1.5 gap-1.5 shadow-lg">
+          <button
+            onClick={() => handleTabChange('ALOKASI')}
+            className={`flex-1 py-2.5 rounded-xl text-xs font-extrabold uppercase tracking-wider transition-all ${
+              activeTab === 'ALOKASI'
+                ? 'bg-[#FA6338] text-white shadow-md'
+                : 'text-white/60 hover:text-white'
+            }`}
+          >
+            Alokasi Meja
           </button>
+          <button
+            onClick={() => handleTabChange('STATUS')}
+            className={`flex-1 py-2.5 rounded-xl text-xs font-extrabold uppercase tracking-wider transition-all relative ${
+              activeTab === 'STATUS'
+                ? 'bg-[#FA6338] text-white shadow-md'
+                : 'text-white/60 hover:text-white'
+            }`}
+          >
+            Status Meja
+            {/* H1: Badge showing occupied count */}
+            {terisiCount > 0 && (
+              <span className="absolute -top-1.5 -right-1 bg-red-500 text-white text-[9px] font-black rounded-full w-4 h-4 flex items-center justify-center">
+                {terisiCount}
+              </span>
+            )}
+          </button>
+          {/* Logout – always accessible (H3: user control) */}
           <button
             onClick={handleLogout}
-            className="flex items-center gap-1.5 px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-bold transition-all"
+            title="Keluar"
+            className="px-3 py-2.5 rounded-xl text-white/50 hover:text-white hover:bg-white/10 text-xs font-bold transition-all"
           >
-            <LogOut className="w-4 h-4" /> Keluar
+            Keluar
           </button>
         </div>
+
+        {/* H1: Step indicator for alokasi tab */}
+        {activeTab === 'ALOKASI' && (
+          <div className="flex items-center justify-center gap-2 mt-3 mb-1">
+            <div className={`w-2 h-2 rounded-full transition-all ${alokasiStep === 1 ? 'bg-[#FA6338] scale-125' : 'bg-white/30'}`} />
+            <div className={`h-0.5 w-12 rounded transition-all ${alokasiStep === 2 ? 'bg-[#FA6338]' : 'bg-white/20'}`} />
+            <div className={`w-2 h-2 rounded-full transition-all ${alokasiStep === 2 ? 'bg-[#FA6338] scale-125' : 'bg-white/30'}`} />
+            <span className="text-[9px] font-bold text-white/40 uppercase tracking-widest ml-1">
+              {alokasiStep === 1 ? 'Langkah 1: Jumlah Tamu' : 'Langkah 2: Pilih Meja'}
+            </span>
+          </div>
+        )}
       </div>
 
-      {/* Main Container Card */}
-      <div className="w-full max-w-2xl bg-[#EAEAEA] rounded-3xl p-6 md:p-8 shadow-2xl border-4 border-[#2B4263] flex flex-col justify-between min-h-[460px] relative">
-        
-        {/* ALOKASI MEJA TAB */}
-        {mainTab === 'ALOKASI' && (
-          <>
-            {/* STEP 1: JUMLAH PELANGGAN */}
-            {step === 1 && (
-              <div className="flex-1 flex flex-col justify-between items-center text-center space-y-6 py-4">
-                <h2 className="text-sm font-extrabold text-slate-800 tracking-wider uppercase">
-                  JUMLAH PELANGGAN
-                </h2>
+      {/* ═══════════════════════════════════════════════════════════════════════
+          TAB: ALOKASI
+      ═══════════════════════════════════════════════════════════════════════ */}
+      {activeTab === 'ALOKASI' && (
+        <>
+          {/* ── STEP 1: Input Jumlah Pelanggan ────────────────────────────────── */}
+          {alokasiStep === 1 && (
+            <div
+              className="w-full max-w-sm bg-white rounded-2xl overflow-hidden shadow-2xl"
+              style={{ border: '4px solid #2B4263' }}
+            >
+              {/* H8: Minimalist – simple header */}
+              <div className="px-6 pt-5 pb-3 text-center">
+                <p className="text-xs font-extrabold text-[#2B4263] tracking-widest uppercase">Jumlah Pelanggan</p>
+                <p className="text-[10px] text-slate-400 mt-0.5">Masukkan jumlah tamu yang akan duduk</p>
+              </div>
 
-                <div className="w-full max-w-md bg-white rounded-2xl p-6 flex items-center justify-between border border-slate-300 shadow-inner">
-                  <span className="text-5xl font-black text-[#FA6338]">{jumlahPelanggan}</span>
-                  <div className="w-20 h-20 relative flex items-center justify-center">
-                    <img src="/logo.png" alt="Pak Resto Icon" className="w-full h-full object-contain" />
+              {/* H2: Real-world language – angka besar, mudah dibaca */}
+              <div className="mx-6 mb-3">
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={inputStr}
+                  placeholder="0"
+                  aria-label="Jumlah pelanggan"
+                  onFocus={() => { if (inputStr === '0') setInputStr(''); }}
+                  onBlur={() => { if (!inputStr) { setInputStr('0'); setJumlahPelanggan(0); } }}
+                  onChange={handleInputChange}
+                  className="w-full text-center text-6xl font-black text-[#FA6338] border-2 border-slate-200 rounded-xl py-4 focus:outline-none focus:border-[#FA6338] bg-slate-50 transition-colors"
+                />
+              </div>
+
+              {/* H5: Error prevention – disable minus at 0, visual min indicator */}
+              <div className="mx-6 mb-6 flex gap-3">
+                <button
+                  onClick={() => adjustCount(-1)}
+                  disabled={jumlahPelanggan <= 0}
+                  aria-label="Kurangi satu"
+                  className="flex-1 h-12 bg-[#262626] hover:bg-black disabled:opacity-30 text-white text-2xl font-black rounded-xl transition-all active:scale-95 flex items-center justify-center"
+                >
+                  −
+                </button>
+                <button
+                  onClick={() => adjustCount(1)}
+                  aria-label="Tambah satu"
+                  className="flex-1 h-12 bg-[#262626] hover:bg-black text-white text-2xl font-black rounded-xl transition-all active:scale-95 flex items-center justify-center"
+                >
+                  +
+                </button>
+                {/* H5: Disable LANJUT when jumlah < 1 */}
+                <button
+                  disabled={jumlahPelanggan < 1}
+                  onClick={() => setAlokasiStep(2)}
+                  aria-label="Lanjut ke pilih meja"
+                  className="flex-[2] h-12 bg-[#FA6338] hover:bg-orange-600 disabled:opacity-40 text-white font-extrabold rounded-xl text-xs uppercase tracking-wider transition-all active:scale-95"
+                >
+                  Lanjut →
+                </button>
+              </div>
+
+              {/* H5: Hint – helps prevent user confusion */}
+              {jumlahPelanggan < 1 && (
+                <p className="text-center text-[10px] text-slate-400 pb-4">Masukkan minimal 1 tamu untuk melanjutkan</p>
+              )}
+
+              <div className="bg-[#2B4263] px-6 py-3 flex items-center justify-between">
+                <span className="text-xs font-black text-white tracking-widest uppercase">Resto Pak Resto</span>
+                {/* H1: show live table counts */}
+                <span className="text-[10px] text-white/50">
+                  {isFetching ? 'Memperbarui…' : `${tersediaCount} meja tersedia`}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* ── STEP 2: Pilih Meja ────────────────────────────────────────────── */}
+          {alokasiStep === 2 && (
+            <div
+              className="w-full max-w-xl bg-white rounded-2xl overflow-hidden shadow-2xl"
+              style={{ border: '4px solid #2B4263' }}
+            >
+              <div className="p-5">
+                {/* H6: Recognition – legend at top */}
+                <div className="flex items-center justify-between mb-4">
+                  <p className="text-[10px] font-extrabold text-slate-400 tracking-widest uppercase">
+                    Pilih Meja — {jumlahPelanggan} Tamu
+                  </p>
+                  <div className="flex items-center gap-2 text-[9px] font-semibold text-slate-400">
+                    <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-[#262626] inline-block" /> Tersedia</span>
+                    <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-[#FA6338] inline-block" /> Dipilih</span>
+                    <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-[#C0C0C0] inline-block" /> Tidak bisa</span>
                   </div>
                 </div>
 
-                <div className="w-full max-w-md flex gap-4">
-                  <button
-                    onClick={() => setJumlahPelanggan((p) => Math.max(0, p - 1))}
-                    className="w-16 h-14 bg-[#262626] hover:bg-black text-white text-3xl font-black rounded-2xl transition-all shadow-md active:scale-95"
-                  >
-                    -
-                  </button>
-                  <button
-                    onClick={() => setJumlahPelanggan((p) => p + 1)}
-                    className="w-16 h-14 bg-[#262626] hover:bg-black text-white text-3xl font-black rounded-2xl transition-all shadow-md active:scale-95"
-                  >
-                    +
-                  </button>
-                  <button
-                    onClick={() => setStep(2)}
-                    className="flex-1 py-4 bg-[#FA6338] hover:bg-orange-600 active:scale-98 text-white font-extrabold rounded-2xl text-xs uppercase tracking-wider transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
-                  >
-                    LANJUT <ArrowRight className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* STEP 2: TABLE SELECTION GRID */}
-            {step === 2 && (
-              <div className="flex-1 flex flex-col justify-between space-y-6">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                    PILIH MEJA (TAMU: {jumlahPelanggan})
-                  </span>
-                  <button
-                    onClick={() => setStep(1)}
-                    className="flex items-center gap-1 text-xs font-bold text-[#FA6338] hover:underline"
-                  >
-                    <ArrowLeft className="w-3.5 h-3.5" /> Kembali
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
-                  {Array.from({ length: 10 }).map((_, index) => {
-                    const nomorMeja = String(index + 1).padStart(2, '0');
-                    const mejaObj = mejaList.find((m) => m.nomor_meja === nomorMeja);
-                    const isSelected = selectedMejaId === mejaObj?.id_meja;
-                    const isTerisi = mejaObj?.status_ketersediaan === 'terisi';
-
+                <div className="grid grid-cols-5 gap-3">
+                  {mejaList.map(m => {
+                    const { isDisabled } = getMejaState(m);
                     return (
                       <button
-                        key={nomorMeja}
-                        disabled={isTerisi}
-                        onClick={() => mejaObj && setSelectedMejaId(mejaObj.id_meja)}
-                        className={`h-24 rounded-2xl font-black text-2xl transition-all flex flex-col items-center justify-center ${
-                          isSelected
-                            ? 'bg-[#FA6338] text-white scale-105 shadow-xl border-2 border-white'
-                            : isTerisi
-                            ? 'bg-[#8C8C8C] text-white cursor-not-allowed opacity-80'
-                            : 'bg-[#262626] text-white hover:bg-black'
-                        }`}
+                        key={m.id_meja}
+                        disabled={isDisabled}
+                        onClick={() => !isDisabled && setSelectedMejaId(prev => prev === m.id_meja ? null : m.id_meja)}
+                        title={isDisabled ? (m.status_ketersediaan === 'terisi' ? 'Meja sedang terisi' : `Kapasitas meja hanya ${m.kapasitas} orang`) : `Pilih Meja ${m.nomor_meja}`}
+                        className={`rounded-xl flex flex-col items-center justify-center py-3 gap-0.5 font-black text-xl transition-all ${getMejaClass(m)}`}
                       >
-                        <span>{nomorMeja}</span>
-                        <span className="text-[9px] font-semibold opacity-70 mt-1 uppercase">
-                          {isTerisi ? 'Terisi' : 'Kosong'}
+                        <span>{m.nomor_meja}</span>
+                        <span className="text-[8px] font-semibold opacity-80 uppercase tracking-wide">
+                          {getMejaLabel(m)}
                         </span>
                       </button>
                     );
                   })}
                 </div>
 
-                <div className="flex items-center justify-between pt-4 border-t border-slate-300">
-                  <button
-                    onClick={() => setStep(1)}
-                    className="px-6 py-3.5 bg-slate-300 hover:bg-slate-400 text-slate-800 font-extrabold rounded-2xl text-xs uppercase tracking-wider transition-all flex items-center gap-1.5"
-                  >
-                    <ArrowLeft className="w-4 h-4" /> KEMBALI
-                  </button>
+                {/* H1: Selected meja feedback */}
+                {selectedMejaId && (
+                  <div className="mt-4 py-2 px-3 bg-orange-50 border border-orange-200 rounded-lg text-xs text-[#FA6338] font-semibold text-center">
+                    Meja {mejaList.find(m => m.id_meja === selectedMejaId)?.nomor_meja} dipilih — tekan Lanjut untuk konfirmasi
+                  </div>
+                )}
+              </div>
 
+              <div className="bg-[#2B4263] px-6 py-3 flex items-center justify-between">
+                <span className="text-xs font-black text-white tracking-widest uppercase">Resto Pak Resto</span>
+                <div className="flex gap-2">
+                  {/* H3: Easy undo – kembali */}
+                  <button
+                    onClick={() => { setAlokasiStep(1); setSelectedMejaId(null); }}
+                    className="px-4 py-2 bg-white/20 hover:bg-white/30 text-white font-bold rounded-lg text-xs uppercase tracking-wider transition-all"
+                  >
+                    ← Kembali
+                  </button>
                   <button
                     disabled={!selectedMejaId}
                     onClick={() => setShowConfirmModal(true)}
-                    className="px-8 py-3.5 bg-[#FA6338] hover:bg-orange-600 disabled:opacity-50 text-white font-extrabold rounded-2xl text-xs uppercase tracking-wider transition-all shadow-md flex items-center gap-2 cursor-pointer"
+                    className="px-5 py-2 bg-[#FA6338] hover:bg-orange-600 disabled:opacity-40 text-white font-extrabold rounded-lg text-xs uppercase tracking-wider transition-all"
                   >
-                    LANJUT <ArrowRight className="w-4 h-4" />
+                    Lanjut →
                   </button>
                 </div>
               </div>
-            )}
+            </div>
+          )}
+        </>
+      )}
 
-            {/* STEP 3: QR CODE DISPLAY */}
-            {step === 3 && allocatedToken && (
-              <div className="flex-1 flex flex-col items-center justify-center text-center space-y-6 py-4">
-                <div className="bg-white p-6 rounded-3xl shadow-xl flex items-center gap-8 border border-slate-200">
-                  <QRCodeSVG value={customerUrl} size={180} level="H" includeMargin={true} />
-                  <div className="w-24 h-24 relative flex items-center justify-center">
-                    <img src="/logo.png" alt="Pak Resto Icon" className="w-full h-full object-contain" />
-                  </div>
-                </div>
-
-                <p className="text-xs font-bold text-slate-700 bg-white px-4 py-2 rounded-xl border border-slate-300">
-                  Meja #{allocatedMejaNomor} — Scan untuk Membuka Menu
-                </p>
-
-                <div className="flex justify-end w-full pt-4 border-t border-slate-300">
-                  <button
-                    onClick={() => { setStep(1); setSelectedMejaId(null); setAllocatedToken(null); }}
-                    className="px-8 py-3.5 bg-[#FA6338] hover:bg-orange-600 text-white font-extrabold rounded-2xl text-xs uppercase tracking-wider transition-all shadow-md flex items-center gap-2 cursor-pointer"
-                  >
-                    LANJUT <ArrowRight className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            )}
-          </>
-        )}
-
-        {/* KELOLA STATUS MEJA TAB */}
-        {mainTab === 'STATUS' && (
-          <div className="flex-1 flex flex-col justify-between space-y-6">
-            <div>
-              <h2 className="text-sm font-extrabold text-slate-800 tracking-wider uppercase mb-1">
-                KELOLA & PEMBERSIHAN MEJA
-              </h2>
-              <p className="text-xs text-slate-500 font-medium">Ubah status meja terisi menjadi kosong/tersedia</p>
+      {/* ═══════════════════════════════════════════════════════════════════════
+          TAB: STATUS MEJA
+      ═══════════════════════════════════════════════════════════════════════ */}
+      {activeTab === 'STATUS' && (
+        <div
+          className="w-full max-w-xl bg-white rounded-2xl overflow-hidden shadow-2xl"
+          style={{ border: '4px solid #2B4263' }}
+        >
+          <div className="p-5">
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-[10px] font-extrabold text-slate-400 tracking-widest uppercase">Status Semua Meja</p>
+              {/* H1: Live summary */}
+              <span className="text-[10px] font-bold text-slate-400">
+                {terisiCount} terisi · {tersediaCount} tersedia
+              </span>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
-              {mejaList.map((m) => (
-                <div
+            {/* H6: Recognition – legend */}
+            <div className="flex items-center gap-3 mb-4 text-[9px] font-semibold text-slate-400">
+              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-[#FA6338] inline-block" /> Terisi (klik untuk lihat QR / bersihkan)</span>
+              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-[#262626] inline-block" /> Kosong</span>
+            </div>
+
+            <div className="grid grid-cols-5 gap-3">
+              {mejaList.map(m => (
+                <button
                   key={m.id_meja}
-                  className={`rounded-2xl border p-4 flex flex-col items-center justify-between text-center gap-2 ${
-                    m.status_ketersediaan === 'terisi'
-                      ? 'bg-amber-100 border-amber-300 shadow-md'
-                      : 'bg-white border-slate-300'
-                  }`}
+                  onClick={() => setQrModalMeja(m)}
+                  title={`Meja ${m.nomor_meja} — ${m.status_ketersediaan === 'terisi' ? 'Terisi, klik untuk kelola' : 'Kosong'}`}
+                  className={`rounded-xl flex flex-col items-center justify-center py-3 gap-0.5 font-black text-xl transition-all ${getStatusMejaClass(m)}`}
                 >
-                  <span className="font-extrabold text-2xl text-slate-800">{m.nomor_meja}</span>
-                  <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase ${
-                    m.status_ketersediaan === 'terisi' ? 'bg-amber-500 text-white' : 'bg-slate-200 text-slate-600'
-                  }`}>
-                    {m.status_ketersediaan}
+                  <span>{m.nomor_meja}</span>
+                  <span className="text-[8px] font-semibold opacity-80 uppercase tracking-wide">
+                    {m.status_ketersediaan === 'terisi' ? 'Terisi' : 'Kosong'}
                   </span>
-                  {m.status_ketersediaan === 'terisi' && (
-                    <button
-                      onClick={() => handleBersihkanMeja(m.id_meja, m.nomor_meja)}
-                      className="w-full py-2 bg-[#2B4263] hover:bg-[#1f3049] text-white text-xs font-bold rounded-xl transition-all shadow-xs"
-                    >
-                      Bersihkan
-                    </button>
-                  )}
-                </div>
+                </button>
               ))}
             </div>
-
-            <div className="pt-4 border-t border-slate-300 text-right">
-              <button
-                onClick={() => setMainTab('ALOKASI')}
-                className="px-6 py-3 bg-[#FA6338] text-white font-extrabold text-xs rounded-2xl uppercase tracking-wider"
-              >
-                Kembali ke Alokasi Meja
-              </button>
-            </div>
           </div>
-        )}
 
-        {/* Footer Brand */}
-        <div className="text-center font-black text-orange-500 text-xs tracking-widest uppercase mt-4">
-          RESTO PAK RESTO
+          <div className="bg-[#2B4263] px-6 py-3 flex items-center justify-between">
+            <span className="text-xs font-black text-white tracking-widest uppercase">Resto Pak Resto</span>
+            <span className="text-[10px] text-white/50">
+              {isFetching ? 'Memperbarui…' : 'Realtime aktif'}
+            </span>
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* Confirmation Modal */}
+      {/* ═══════════════════════════════════════════════════════════════════════
+          MODAL: KONFIRMASI ALOKASI
+          H4: Consistent pattern, H3: Easy cancel
+      ═══════════════════════════════════════════════════════════════════════ */}
       {showConfirmModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-3xl p-8 max-w-sm w-full text-center space-y-6 shadow-2xl border border-slate-200">
-            <h3 className="text-sm font-bold text-[#2B4263] leading-relaxed">
-              Apakah yakin ingin mengubah status meja menjadi aktif?
-            </h3>
-
-            <div className="flex gap-4">
+        <div
+          className="fixed inset-0 bg-black/60 flex items-end justify-center p-6 z-50"
+          onClick={() => setShowConfirmModal(false)} // H3: click backdrop to cancel
+        >
+          <div
+            className="bg-white rounded-2xl p-6 w-full max-w-xs shadow-2xl text-center space-y-4"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* H2: Plain language */}
+            <p className="text-sm font-bold text-[#2B4263] leading-snug">
+              Aktifkan Meja {mejaList.find(m => m.id_meja === selectedMejaId)?.nomor_meja}?
+            </p>
+            <p className="text-[11px] text-slate-400">
+              Meja akan ditandai terisi dan QR akan dibuat untuk {jumlahPelanggan} tamu.
+            </p>
+            <div className="flex gap-3">
+              {/* H3: BATAL always on left */}
               <button
                 onClick={() => setShowConfirmModal(false)}
-                className="flex-1 py-3 bg-[#FA6338] hover:bg-orange-600 text-white font-bold rounded-xl text-xs uppercase tracking-wider shadow-md cursor-pointer"
+                className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold rounded-xl text-xs uppercase tracking-wider transition-all"
               >
-                BATAL
+                Batal
               </button>
               <button
                 onClick={handleAlokasikanMeja}
-                disabled={loading}
-                className="flex-1 py-3 bg-[#2B4263] hover:bg-[#1f3049] text-white font-bold rounded-xl text-xs uppercase tracking-wider shadow-md flex items-center justify-center gap-1 cursor-pointer"
+                disabled={isAllocating}
+                className="flex-1 py-3 bg-[#FA6338] hover:bg-orange-600 disabled:opacity-50 text-white font-extrabold rounded-xl text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-1"
               >
-                {loading ? 'Proses...' : <>LANJUT <ArrowRight className="w-3.5 h-3.5" /></>}
+                {isAllocating ? (
+                  <><span className="animate-spin inline-block w-3 h-3 border-2 border-white border-t-transparent rounded-full" /> Memproses…</>
+                ) : 'Ya, Aktifkan →'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════════════
+          MODAL: QR CODE / KELOLA MEJA
+          H1: Visibility, H3: User control, H9: Recovery
+      ═══════════════════════════════════════════════════════════════════════ */}
+      {qrModalMeja && (
+        <div
+          className="fixed inset-0 bg-black/60 flex items-center justify-center p-6 z-50"
+          onClick={() => setQrModalMeja(null)}
+        >
+          <div
+            className="bg-white rounded-2xl overflow-hidden w-full max-w-sm shadow-2xl"
+            style={{ border: '4px solid #2B4263' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="p-6 flex flex-col items-center gap-4">
+              {/* H1: Clear meja identity */}
+              <div className="text-center">
+                <p className="text-[10px] font-extrabold text-slate-400 tracking-widest uppercase">Meja {qrModalMeja.nomor_meja}</p>
+                <span className={`mt-1 inline-block text-[9px] font-bold px-3 py-0.5 rounded-full uppercase tracking-widest ${
+                  qrModalMeja.status_ketersediaan === 'terisi' ? 'bg-orange-100 text-[#FA6338]' : 'bg-slate-100 text-slate-500'
+                }`}>
+                  {qrModalMeja.status_ketersediaan}
+                </span>
+              </div>
+
+              {allocatedTokens[qrModalMeja.id_meja] ? (
+                <>
+                  <QRCodeSVG
+                    value={`${origin}/meja/${allocatedTokens[qrModalMeja.id_meja]}/menu`}
+                    size={200}
+                    level="H"
+                    includeMargin
+                  />
+                  {/* H2: Real-world instruction */}
+                  <p className="text-[11px] text-slate-400 text-center">
+                    Tunjukkan QR ini ke pelanggan untuk akses menu
+                  </p>
+                  {/* H9: Confirm before irreversible action */}
+                  <button
+                    onClick={() => {
+                      if (confirm(`Bersihkan Meja ${qrModalMeja.nomor_meja}? Status akan kembali tersedia.`)) {
+                        handleBersihkanMeja(qrModalMeja.id_meja, qrModalMeja.nomor_meja);
+                      }
+                    }}
+                    disabled={isCleaning}
+                    className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-1"
+                  >
+                    {isCleaning ? 'Membersihkan…' : '🧹 Bersihkan Meja'}
+                  </button>
+                </>
+              ) : (
+                // H8: Minimal, clear state for no-QR case
+                <div className="py-6 flex flex-col items-center gap-2">
+                  <span className="text-3xl">📋</span>
+                  <p className="text-sm text-slate-500 text-center">QR belum tersedia.<br />Alokasikan meja ini terlebih dahulu.</p>
+                  {qrModalMeja.status_ketersediaan === 'terisi' && (
+                    <button
+                      onClick={() => handleBersihkanMeja(qrModalMeja.id_meja, qrModalMeja.nomor_meja)}
+                      disabled={isCleaning}
+                      className="mt-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all"
+                    >
+                      {isCleaning ? 'Membersihkan…' : 'Bersihkan Meja'}
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="bg-[#2B4263] px-6 py-3 flex items-center justify-between">
+              <span className="text-xs font-black text-white tracking-widest uppercase">Resto Pak Resto</span>
+              <button
+                onClick={() => setQrModalMeja(null)}
+                className="px-5 py-2 bg-[#FA6338] hover:bg-orange-600 text-white font-extrabold rounded-lg text-xs uppercase tracking-wider transition-all"
+              >
+                Tutup ×
               </button>
             </div>
           </div>
@@ -336,5 +537,3 @@ export default function PelayanPage() {
     </div>
   );
 }
-
-

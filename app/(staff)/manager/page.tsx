@@ -320,7 +320,7 @@ export default function ManagerPage() {
                               <Cell key={entry.role} fill={ROLE_COLORS[entry.role] || '#ccc'} />
                             ))}
                           </Pie>
-                          <Tooltip formatter={(v: any, name: string) => [v, name]} />
+                          <Tooltip formatter={(v: any, name: string | undefined) => [v, name ?? '']} />
                         </PieChart>
                       </ResponsiveContainer>
                     </div>
