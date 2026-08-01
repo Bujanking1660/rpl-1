@@ -10,6 +10,7 @@ export default async function Home() {
     redirect(`/${session.peran}`);
   }
 
+
   return (
     <div className="min-h-screen bg-slate-900 text-white flex flex-col items-center justify-center p-6">
       <div className="max-w-3xl w-full text-center space-y-8">
@@ -18,9 +19,9 @@ export default async function Home() {
         </div>
 
         <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight">
-          Sistem Informasi Manajemen Restoran
+          Sistem Informasi Manajemen Restoran Pak Resto
         </h1>
-        
+
         <p className="text-slate-400 text-lg max-w-xl mx-auto">
           Portal terintegrasi untuk Pelayan, Kasir, Koki, Manajer, dan Pemesanan Mandiri Pelanggan.
         </p>
