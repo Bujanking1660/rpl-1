@@ -53,7 +53,7 @@ create table pesanan (
   id_meja           uuid not null references meja(id_meja),
   id_pelanggan      uuid not null references pelanggan(id_pelanggan),
   id_pegawai        uuid not null references pegawai(id_pegawai),
-  token_sesi        text not null,
+  token_sesi        text not null, -- Satu sesi QR (token) dapat mencakup banyak pesanan (satu pesanan per ronde setelah pembayaran). TIDAK unique.
   token_expired_at  timestamptz not null,
   created_at        timestamptz not null default now()
 );

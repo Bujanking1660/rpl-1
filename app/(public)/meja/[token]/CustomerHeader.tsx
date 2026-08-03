@@ -2,81 +2,59 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { ShoppingBag, Receipt, Clock } from 'lucide-react';
+import { ShoppingBag, Receipt, Clock, UtensilsCrossed } from 'lucide-react';
 
 export default function CustomerHeader({ nomorMeja, token }: { nomorMeja: string; token: string }) {
   const pathname = usePathname();
 
+  const navItems = [
+    { href: `/meja/${token}/menu`, label: 'Menu', icon: <ShoppingBag className="w-5 h-5" />, active: pathname.endsWith('/menu') },
+    { href: `/meja/${token}/pembayaran`, label: 'Bill', icon: <Receipt className="w-5 h-5" />, active: pathname.endsWith('/pembayaran') },
+    { href: `/meja/${token}/status`, label: 'Status', icon: <Clock className="w-5 h-5" />, active: pathname.endsWith('/status') },
+  ];
+
   return (
     <>
-      {/* Header Banner matching Pelanggan.png */}
-      <div className="bg-[#2B4263] text-white px-6 pt-6 pb-8 relative overflow-hidden rounded-b-3xl shadow-lg">
-        {/* Coffee background texture */}
+      {/* Header Banner */}
+      <header className="relative overflow-hidden rounded-b-3xl shadow-lg px-6 pt-6 pb-8 bg-gradient-to-br from-[#2B4263] via-[#355070] to-[#1F2937] text-white">
         <div
-          className="absolute inset-0 opacity-30 bg-cover bg-center pointer-events-none"
+          className="absolute inset-0 opacity-20 bg-cover bg-center pointer-events-none"
           style={{ backgroundImage: `url('/bg.png')` }}
         />
-        
+        <div className="absolute -top-16 -right-16 w-48 h-48 rounded-full bg-[#FA6338]/20 blur-3xl pointer-events-none" />
+
         <div className="relative z-10 flex items-center justify-between">
           <div>
-            <h1 className="text-xl font-bold text-orange-400 tracking-wide mb-1 uppercase">
-              Resto Pak Resto
+            <h1 className="flex items-center gap-1.5 text-sm font-bold text-orange-300 tracking-wide mb-1.5 uppercase">
+              <UtensilsCrossed className="w-4 h-4" /> Resto Pak Resto
             </h1>
-            <h2 className="text-2xl font-extrabold text-white">Hi,</h2>
-            <p className="text-slate-200 text-xs mt-0.5">Order ur fav food & drink</p>
+            <h2 className="text-2xl font-extrabold text-white">Hi, selamat datang!</h2>
+            <p className="text-slate-200/80 text-xs mt-0.5">Order makanan & minuman favoritmu</p>
           </div>
-          <div className="bg-orange-500/90 text-white px-4 py-2 rounded-2xl border border-orange-400/30 flex flex-col items-center justify-center shadow-md">
-            <span className="text-[10px] font-semibold tracking-wider uppercase opacity-90">MEJA</span>
-            <span className="text-xl font-black">{nomorMeja}</span>
+          <div className="glass-dark rounded-2xl px-4 py-2.5 flex flex-col items-center justify-center shadow-md">
+            <span className="text-[10px] font-semibold tracking-wider uppercase opacity-90">Meja</span>
+            <span className="text-xl font-black text-orange-300">{nomorMeja}</span>
           </div>
         </div>
-      </div>
+      </header>
 
-      {/* Bottom Navigation */}
-      <div className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-white/95 backdrop-blur-md border-t border-slate-100 py-2 px-6 flex items-center justify-around z-50 shadow-2xl">
-        <Link
-          href={`/meja/${token}/menu`}
-          className={`flex flex-col items-center gap-1 py-1 px-4 rounded-2xl transition-all ${
-            pathname.endsWith('/menu')
-              ? 'text-[#FA6338] font-bold'
-              : 'text-slate-400 hover:text-slate-600'
-          }`}
-        >
-          <div className={`p-2 rounded-xl ${pathname.endsWith('/menu') ? 'bg-orange-50' : ''}`}>
-            <ShoppingBag className="w-5 h-5" />
-          </div>
-          <span className="text-[11px]">Home</span>
-        </Link>
-
-        <Link
-          href={`/meja/${token}/pembayaran`}
-          className={`flex flex-col items-center gap-1 py-1 px-4 rounded-2xl transition-all ${
-            pathname.endsWith('/pembayaran')
-              ? 'text-[#FA6338] font-bold'
-              : 'text-slate-400 hover:text-slate-600'
-          }`}
-        >
-          <div className={`p-2 rounded-xl ${pathname.endsWith('/pembayaran') ? 'bg-orange-50' : ''}`}>
-            <Receipt className="w-5 h-5" />
-          </div>
-          <span className="text-[11px]">Bill</span>
-        </Link>
-
-        <Link
-          href={`/meja/${token}/status`}
-          className={`flex flex-col items-center gap-1 py-1 px-4 rounded-2xl transition-all ${
-            pathname.endsWith('/status')
-              ? 'text-[#FA6338] font-bold'
-              : 'text-slate-400 hover:text-slate-600'
-          }`}
-        >
-          <div className={`p-2 rounded-xl ${pathname.endsWith('/status') ? 'bg-orange-50' : ''}`}>
-            <Clock className="w-5 h-5" />
-          </div>
-          <span className="text-[11px]">Status</span>
-        </Link>
-      </div>
+      {/* Bottom Navigation (glass) */}
+      <nav className="fixed bottom-4 left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-md glass rounded-2xl py-2 px-4 flex items-center justify-around z-50 shadow-xl">
+        {navItems.map(({ href, label, icon, active }) => (
+          <Link
+            key={href}
+            href={href}
+            className={`flex flex-col items-center gap-1 py-1 px-4 rounded-2xl transition-all ${
+              active ? 'text-[#2B4263] font-bold' : 'text-slate-400 hover:text-slate-600'
+            }`}
+          >
+            <div className={`p-2 rounded-xl transition-all ${active ? 'bg-[#EEF2F8]' : ''}`}>
+              {icon}
+            </div>
+            <span className="text-[11px]">{label}</span>
+          </Link>
+        ))}
+      </nav>
     </>
   );
 }
-

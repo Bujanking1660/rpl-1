@@ -14,6 +14,7 @@ export async function validateTokenSesiAction(token_sesi: string) {
     `)
     .eq('token_sesi', token_sesi)
     .order('created_at', { ascending: false })
+    .order('id_pesanan', { ascending: false })
     .limit(1)
     .maybeSingle();
 
@@ -82,6 +83,12 @@ export async function submitPesananPelangganAction(
       .single();
 
     if (createError || !newPesanan) {
+      if (String(createError?.message).includes('duplicate key') && String(createError?.message).includes('pesanan_token_sesi_key')) {
+        return {
+          success: false,
+          error: 'Database perlu diperbarui untuk ronde pesanan baru. Jalankan di SQL Editor Supabase: ALTER TABLE pesanan DROP CONSTRAINT IF EXISTS pesanan_token_sesi_key;',
+        };
+      }
       return { success: false, error: createError?.message || 'Gagal membuat pesanan baru' };
     }
     pesananId = newPesanan.id_pesanan;

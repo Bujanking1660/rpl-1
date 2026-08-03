@@ -15,7 +15,7 @@ export async function getDashboardStatsAction() {
   // Total Pemasukan dari pembayaran terkonfirmasi
   const { data: pembayaran } = await supabase
     .from('pembayaran')
-    .select('total_bayar, metode_pembayaran, created_at')
+    .select('total_bayar, metode_pembayaran, waktu_konfirmasi')
     .eq('status_pembayaran', 'terkonfirmasi');
 
   const totalPemasukan = pembayaran?.reduce((sum, item) => sum + Number(item.total_bayar || 0), 0) || 0;
@@ -26,14 +26,49 @@ export async function getDashboardStatsAction() {
   const tunaiCount = pembayaran?.filter((p) => p.metode_pembayaran === 'tunai').length || 0;
   const qrisCount = pembayaran?.filter((p) => p.metode_pembayaran === 'qr_gopay').length || 0;
 
+  // Pendapatan hari ini
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const pendapatanHariIni = pembayaran?.filter((p) => {
+    if (!p.waktu_konfirmasi) return false;
+    return new Date(p.waktu_konfirmasi) >= todayStart;
+  }).reduce((sum, p) => sum + Number(p.total_bayar || 0), 0) || 0;
+
+  // Pendapatan kemarin
+  const kemarin = new Date();
+  kemarin.setDate(kemarin.getDate() - 1);
+  kemarin.setHours(0, 0, 0, 0);
+  const kemarin_end = new Date();
+  kemarin_end.setDate(kemarin_end.getDate() - 1);
+  kemarin_end.setHours(23, 59, 59, 999);
+  const pendapatanKemarin = pembayaran?.filter((p) => {
+    if (!p.waktu_konfirmasi) return false;
+    const t = new Date(p.waktu_konfirmasi);
+    return t >= kemarin && t <= kemarin_end;
+  }).reduce((sum, p) => sum + Number(p.total_bayar || 0), 0) || 0;
+
+  // Pendapatan minggu ini
+  const weekStart = new Date();
+  weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+  weekStart.setHours(0, 0, 0, 0);
+  const pendapatanMingguIni = pembayaran?.filter((p) => {
+    if (!p.waktu_konfirmasi) return false;
+    return new Date(p.waktu_konfirmasi) >= weekStart;
+  }).reduce((sum, p) => sum + Number(p.total_bayar || 0), 0) || 0;
+
+  // Growth % hari ini vs kemarin
+  const growthHarian = pendapatanKemarin > 0
+    ? Math.round(((pendapatanHariIni - pendapatanKemarin) / pendapatanKemarin) * 100)
+    : (pendapatanHariIni > 0 ? 100 : 0);
+
   // Revenue 7 hari terakhir
   const sevenDaysAgo = new Date();
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
   const { data: revenueHarian } = await supabase
     .from('pembayaran')
-    .select('total_bayar, created_at')
+    .select('total_bayar, waktu_konfirmasi')
     .eq('status_pembayaran', 'terkonfirmasi')
-    .gte('created_at', sevenDaysAgo.toISOString());
+    .gte('waktu_konfirmasi', sevenDaysAgo.toISOString());
 
   // Group by date
   const revenueByDay: Record<string, number> = {};
@@ -44,7 +79,7 @@ export async function getDashboardStatsAction() {
     revenueByDay[key] = 0;
   }
   revenueHarian?.forEach((item) => {
-    const d = new Date(item.created_at);
+    const d = new Date(item.waktu_konfirmasi);
     const key = d.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric' });
     if (key in revenueByDay) {
       revenueByDay[key] += Number(item.total_bayar || 0);
@@ -93,7 +128,27 @@ export async function getDashboardStatsAction() {
     topMenu,
     roleDistribusi,
     revenueChartData,
+    pendapatanHariIni,
+    pendapatanKemarin,
+    pendapatanMingguIni,
+    growthHarian,
   };
+}
+
+export async function getLaporanTransaksiAction(startDate?: string, endDate?: string) {
+  const supabase = await createClient();
+  let query = supabase
+    .from('pembayaran')
+    .select('*, pesanan(id_pesanan, meja:id_meja(nomor_meja))')
+    .eq('status_pembayaran', 'terkonfirmasi')
+    .order('waktu_konfirmasi', { ascending: false });
+
+  if (startDate) query = query.gte('waktu_konfirmasi', startDate);
+  if (endDate) query = query.lte('waktu_konfirmasi', endDate);
+
+  const { data, error } = await query;
+  if (error) return { success: false, error: error.message, data: [] };
+  return { success: true, data };
 }
 
 // === CRUD PEGAWAI ===
