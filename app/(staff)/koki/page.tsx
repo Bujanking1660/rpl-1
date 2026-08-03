@@ -29,7 +29,6 @@ export default function KokiPage() {
   const [antrian, setAntrian] = useState<KokiItem[]>([]);
   const [riwayat, setRiwayat] = useState<KokiItem[]>([]);
   const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'PESANAN' | 'RIWAYAT'>('DASHBOARD');
-  const [filterPesanan, setFilterPesanan] = useState<'Semua' | 'Baru' | 'Sedang Dimasak' | 'Siap Di Antar'>('Semua');
   const [searchQuery, setSearchQuery] = useState('');
   const [updatingId, setUpdatingId] = useState<string | null>(null);
 
@@ -175,21 +174,6 @@ export default function KokiPage() {
               {/* Pesanan Section */}
               <div className="space-y-4">
                 <h2 className="text-lg font-bold text-slate-800">Pesanan Dapur</h2>
-                <div className="flex gap-2 flex-wrap">
-                  {['Semua', 'Baru', 'Sedang Dimasak', 'Siap Di Antar'].map((tab) => (
-                    <button
-                      key={tab}
-                      onClick={() => setFilterPesanan(tab as 'Semua' | 'Baru' | 'Sedang Dimasak' | 'Siap Di Antar')}
-                      className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                        filterPesanan === tab
-                          ? 'bg-[#2B4263] text-white shadow-md'
-                          : 'bg-white text-slate-400 border border-slate-100 hover:text-slate-600'
-                      }`}
-                    >
-                      {tab}
-                    </button>
-                  ))}
-                </div>
 
                 {/* Items Grid */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
