@@ -81,6 +81,19 @@ export async function bersihkanMejaAction(id_meja: string) {
   if (error) {
     return { success: false, error: error.message };
   }
+
+  // Meja kosong = tidak ada pelanggan yang akan bayar, tutup pesanan
+  // yang masih menunggu pembayaran agar tidak muncul di kasir.
+  const { error: pesananError } = await supabase
+    .from('pesanan')
+    .update({ status: 'selesai' })
+    .eq('id_meja', id_meja)
+    .eq('status', 'menunggu_pembayaran');
+
+  if (pesananError) {
+    return { success: false, error: pesananError.message };
+  }
+
   return { success: true };
 }
 

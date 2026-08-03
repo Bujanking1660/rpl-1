@@ -11,7 +11,7 @@ export async function getPesananPendingKasirAction() {
     .from('pesanan')
     .select(`
       *,
-      meja (*),
+      meja!inner (*),
       pelanggan (*),
       detail_pesanan (
         *,
@@ -20,6 +20,7 @@ export async function getPesananPendingKasirAction() {
       pembayaran (*)
     `)
     .eq('status', 'menunggu_pembayaran')
+    .eq('meja.status_ketersediaan', 'terisi')
     .order('created_at', { ascending: false });
 
   if (error) {

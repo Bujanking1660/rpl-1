@@ -34,6 +34,7 @@ export default function PelayanPage() {
   const [isAllocating, setIsAllocating] = useState(false);
   const [qrModalMeja, setQrModalMeja] = useState<Meja | null>(null);
   const [isCleaning, setIsCleaning] = useState(false);
+  const [lanIp, setLanIp] = useState<string | null>(null);
 
   // ── Realtime fetch ───────────────────────────────────────────────────────────
   const fetchMejaList = useCallback(async () => {
@@ -45,6 +46,10 @@ export default function PelayanPage() {
 
   useEffect(() => {
     fetchMejaList();
+    fetch('/api/lan-ip')
+      .then((r) => r.json())
+      .then((d) => { if (d.ip) setLanIp(d.ip as string); })
+      .catch(() => {});
     const supabase = createClient();
     const channel = supabase
       .channel('pelayan-meja')
@@ -156,6 +161,8 @@ export default function PelayanPage() {
   }
 
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  const port = typeof window !== 'undefined' ? window.location.port : '';
+  const qrBaseUrl = lanIp ? `http://${lanIp}${port ? `:${port}` : ''}` : origin;
 
   // Derived counts for status badge (H1: system status visibility)
   const terisiCount = mejaList.filter(m => m.status_ketersediaan === 'terisi').length;
@@ -482,11 +489,20 @@ export default function PelayanPage() {
               {allocatedTokens[qrModalMeja.id_meja] ? (
                 <>
                   <QRCodeSVG
-                    value={`${origin}/meja/${allocatedTokens[qrModalMeja.id_meja]}/menu`}
+                    value={`${qrBaseUrl}/meja/${allocatedTokens[qrModalMeja.id_meja]}/menu`}
                     size={200}
                     level="H"
                     includeMargin
                   />
+                  <a
+                    href={`${qrBaseUrl}/meja/${allocatedTokens[qrModalMeja.id_meja]}/menu`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[10px] text-[#FA6338] font-bold underline break-all text-center max-w-full"
+                    title="Buka link untuk debugging"
+                  >
+                    {`${qrBaseUrl}/meja/${allocatedTokens[qrModalMeja.id_meja]}/menu`}
+                  </a>
                   {/* H2: Real-world instruction */}
                   <p className="text-[11px] text-slate-400 text-center">
                     Tunjukkan QR ini ke pelanggan untuk akses menu

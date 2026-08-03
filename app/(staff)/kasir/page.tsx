@@ -28,6 +28,7 @@ export default function KasirPage() {
       .channel('kasir-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'pesanan' }, () => fetchPesananList())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'pembayaran' }, () => fetchPesananList())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'meja' }, () => fetchPesananList())
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };

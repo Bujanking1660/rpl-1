@@ -13,7 +13,9 @@ export async function validateTokenSesiAction(token_sesi: string) {
       pelanggan (*)
     `)
     .eq('token_sesi', token_sesi)
-    .single();
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
 
   if (error || !pesanan) {
     return { valid: false, error: 'Sesi meja tidak ditemukan atau tidak valid' };
@@ -55,7 +57,35 @@ export async function submitPesananPelangganAction(
   }
 
   const supabase = await createClient();
-  const pesananId = validation.pesanan.id_pesanan;
+  const sessionPesanan = validation.pesanan;
+  const mejaId = sessionPesanan.id_meja;
+  const idPelanggan = sessionPesanan.id_pelanggan;
+  const idPegawai = sessionPesanan.id_pegawai;
+
+  let pesananId = sessionPesanan.id_pesanan;
+
+  // Jika pesanan terakhir sudah dibayar (diproses/selesai), buat tagihan baru
+  // untuk ronde pesanan ini agar item yang sudah dibayar tidak tertagih lagi.
+  const needsNewPesanan = sessionPesanan.status !== 'menunggu_pembayaran';
+  if (needsNewPesanan) {
+    const { data: newPesanan, error: createError } = await supabase
+      .from('pesanan')
+      .insert({
+        id_meja: mejaId,
+        id_pelanggan: idPelanggan,
+        id_pegawai: idPegawai,
+        token_sesi,
+        token_expired_at: new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString(),
+        status: 'menunggu_pembayaran',
+      })
+      .select('id_pesanan')
+      .single();
+
+    if (createError || !newPesanan) {
+      return { success: false, error: createError?.message || 'Gagal membuat pesanan baru' };
+    }
+    pesananId = newPesanan.id_pesanan;
+  }
 
   const detailRecords = items.map((item) => ({
     id_pesanan: pesananId,
