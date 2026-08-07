@@ -5,6 +5,9 @@ import { Toaster } from 'sonner';
 export const metadata: Metadata = {
   title: 'Pak Resto UNIKOM - Sistem Manajemen Operasional Restoran',
   description: 'Sistem Informasi Manajemen Operasional Restoran Pak Resto UNIKOM',
+  icons: {
+    icon: '/logo.png',
+  },
 };
 
 export default function RootLayout({
